@@ -39,7 +39,7 @@ function createWindow() {
     height: 820,
     minWidth: 960,
     minHeight: 640,
-    title: '超声医疗报价平台',
+    title: 'QuoteSys 通用商业报价系统',
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
@@ -222,7 +222,7 @@ function localIpv4List() {
 
 /**
  * 局域网自动发现主设备：扫描本机所有候选网段 .1–.254 的 :8000/api/health，
- * 校验响应含 "app":"hhz-data-service"，返回第一个命中的基地址。
+ * 校验响应含 "app":"quote-service"（或兼容旧服务 "hhz-data-service"），返回第一个命中的基地址。
  * 改进：遍历所有本机网段（解决多网卡选错接口）；超时提升到 800ms（解决 Wi-Fi 误超时）。
  */
 async function discoverHost() {
@@ -270,7 +270,7 @@ async function discoverHost() {
         clearTimeout(timer)
         if (res.ok) {
           const body = await res.json().catch(() => ({}))
-          if (body.app === 'hhz-data-service') {
+          if (body.app === 'quote-service' || body.app === 'hhz-data-service') {
             found = `http://${ip}:8000`
             return
           }
@@ -310,10 +310,12 @@ app.whenReady().then(() => {
   })
 
   // IPC：前端启动时同步图片
-  ipcMain.handle('hhz:image-sync', (_event, backendBase) => syncImages(backendBase))
+  const handleImageSync = (_event, backendBase) => syncImages(backendBase)
+  ipcMain.handle('quote:image-sync', handleImageSync)
+  ipcMain.handle('hhz:image-sync', handleImageSync)
 
   // IPC：按相对路径返回本地缓存可访问 URL（app-img://cache/...），不存在返回 ''
-  ipcMain.handle('hhz:image-resolve', (_event, rel) => {
+  const handleImageResolve = (_event, rel) => {
     try {
       const local = safeJoin(imageCacheDir(), String(rel || '').replace(/^uploads\//, ''))
       if (fs.existsSync(local)) {
@@ -323,27 +325,36 @@ app.whenReady().then(() => {
       /* ignore */
     }
     return ''
-  })
+  }
+  ipcMain.handle('quote:image-resolve', handleImageResolve)
+  ipcMain.handle('hhz:image-resolve', handleImageResolve)
 
   // IPC：局域网自动发现主设备，返回基地址或 null
-  ipcMain.handle('hhz:discover-host', () => discoverHost())
+  const handleDiscoverHost = () => discoverHost()
+  ipcMain.handle('quote:discover-host', handleDiscoverHost)
+  ipcMain.handle('hhz:discover-host', handleDiscoverHost)
 
   // IPC：目录缓存读写（/api/sync 结果，离线兜底）
-  ipcMain.handle('hhz:catalog-cache-read', () => {
+  const handleCatalogCacheRead = () => {
     try {
       return JSON.parse(fs.readFileSync(catalogCacheFile(), 'utf8'))
     } catch {
       return null
     }
-  })
-  ipcMain.handle('hhz:catalog-cache-write', (_event, payload) => {
+  }
+  ipcMain.handle('quote:catalog-cache-read', handleCatalogCacheRead)
+  ipcMain.handle('hhz:catalog-cache-read', handleCatalogCacheRead)
+
+  const handleCatalogCacheWrite = (_event, payload) => {
     try {
       fs.writeFileSync(catalogCacheFile(), JSON.stringify(payload))
       return true
     } catch {
       return false
     }
-  })
+  }
+  ipcMain.handle('quote:catalog-cache-write', handleCatalogCacheWrite)
+  ipcMain.handle('hhz:catalog-cache-write', handleCatalogCacheWrite)
 
   createWindow()
 

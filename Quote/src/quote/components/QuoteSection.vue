@@ -145,7 +145,7 @@ onUnmounted(() => {
       <div class="quote-header-bar">
         <div class="header-titles">
           <div class="title-row">
-            <h2 class="workspace-title">超声医疗价格计算器</h2>
+            <h2 class="workspace-title">QuoteSys 商业价格计算器</h2>
           </div>
           <p class="workspace-sub">
             实时多方案测算 · 阶梯量价分析 · 一键生成规范盖章报价单

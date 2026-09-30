@@ -64,10 +64,10 @@ async function test() {
     const base = url.value.trim().replace(/\/+$/, '')
     const res = await fetch(`${base}/api/health`)
     const body = await res.json().catch(() => ({}))
-    if (res.ok && body.app === 'hhz-data-service') {
+    if (res.ok && (body.app === 'quote-service' || body.app === 'hhz-data-service')) {
       testResult.value = '连接成功'
     } else if (res.ok) {
-      testResult.value = '连接失败：目标不是 HHZ 数据服务'
+      testResult.value = '连接失败：目标不是 QuoteSys 数据服务'
     } else {
       testResult.value = '连接失败：服务响应异常'
     }
@@ -184,7 +184,7 @@ async function syncNow() {
 
           <p v-if="testResult" class="host-result">{{ testResult }}</p>
           <p class="host-note">
-            同一局域网内，主设备（HHZ 数据服务）与客户机端口一致为
+            同一局域网内，主设备（QuoteSys 数据服务）与客户机端口一致为
             8000。找不到主设备时会自动使用本机缓存或内置演示数据。
           </p>
         </div>

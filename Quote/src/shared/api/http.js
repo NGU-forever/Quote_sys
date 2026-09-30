@@ -1,18 +1,20 @@
 // src/shared/api/http.js
 // 请求工厂：为各系统 client 提供统一的 fetch 封装，不携带任何业务方法。
-// - withToken=true 时自动附加工作台 token（仅工作台 client 使用）；
+// - withToken=true 时自动附加工作台 token（仅工作台 client 或需认证端点使用）；
 // - 401 时自动清除失效 token（仅 withToken 模式）。
 // 管理接口不存在于此文件，全部由调用方 client 组装。
 import { getApiBase } from '../utils/backendConfig'
 
-const TOKEN_KEY = 'hhz_workbench_token'
+const TOKEN_KEY = 'quote_workbench_token'
+const LEGACY_TOKEN_KEY = 'hhz_workbench_token'
 
 function getToken() {
-  return localStorage.getItem(TOKEN_KEY) || ''
+  return localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY) || ''
 }
 
 function clearToken() {
   localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(LEGACY_TOKEN_KEY)
 }
 
 function qs(params = {}) {
@@ -41,7 +43,7 @@ export function createHttp({ withToken = false } = {}) {
     try {
       res = await fetch(`${getApiBase()}${path}`, { ...options, headers })
     } catch {
-      throw new Error('无法连接后端服务，请确认后端已启动（npm run dev:server），或在登录页配置服务器地址')
+      throw new Error('无法连接后端服务，请确认后端已启动（npm run dev:server），或在设置中配置服务器地址')
     }
 
     if (res.status === 401 && withToken) clearToken()
@@ -52,12 +54,19 @@ export function createHttp({ withToken = false } = {}) {
     } catch {
       // 非 JSON 响应忽略
     }
-    if (!res.ok) throw new Error(data.error || `请求失败（${res.status}）`)
+    if (!res.ok) {
+      throw new Error(data.detail || data.error || data.message || `请求失败（${res.status}）`)
+    }
     return data
   }
 
-  // 供工作台 client 复用 token 工具
-  request._token = { getToken, setToken: (t) => localStorage.setItem(TOKEN_KEY, t), clearToken, hasToken: () => Boolean(getToken()) }
+  // 供 client 复用 token 工具
+  request._token = {
+    getToken,
+    setToken: (t) => localStorage.setItem(TOKEN_KEY, t),
+    clearToken,
+    hasToken: () => Boolean(getToken())
+  }
   request._qs = qs
   return request
 }

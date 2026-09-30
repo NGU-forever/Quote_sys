@@ -9,7 +9,9 @@ import {
   Plus,
   Stethoscope,
   X,
-  Zap
+  Zap,
+  Sparkles,
+  Layers
 } from 'lucide-vue-next'
 import { useCatalogStore } from '../../shared/stores/catalog'
 import { useQuoteStore } from '../stores/quote'
@@ -179,13 +181,13 @@ const nextTierDiff = computed(() => {
       <div class="product-config-card" :class="{ empty: !catalog.selectedDevice }">
         <div class="card-head">
           <div class="card-head-picker">
-            <span class="config-tag tone-blue">治疗设备</span>
+            <span class="config-tag tone-blue">硬件 / 主设备</span>
             <select
               class="card-select"
               :value="catalog.selectedDeviceId ?? ''"
               @change="onDeviceChange"
             >
-              <option value="">请选择治疗设备</option>
+              <option value="">请选择硬件 / 主设备</option>
               <option v-for="device in catalog.deviceList" :key="device.id" :value="device.id">
                 {{ device.name }}
               </option>
@@ -201,7 +203,7 @@ const nextTierDiff = computed(() => {
               @click="catalog.selectedDevice.image && openImageModal(resolveImage(catalog.selectedDevice.image), catalog.selectedDevice.name, catalog.selectedDevice.spec)"
             >
               <div class="stage-badges">
-                <span class="badge-tag">治疗设备</span>
+                <span class="badge-tag">硬件 / 设备</span>
                 <span v-if="catalog.selectedDevice.sku" class="badge-sku">{{ catalog.selectedDevice.sku }}</span>
               </div>
               <template v-if="catalog.selectedDevice?.image">
@@ -225,7 +227,7 @@ const nextTierDiff = computed(() => {
                   <Stethoscope :size="38" class="placeholder-icon" />
                 </div>
                 <span class="placeholder-title">实物照片待上传</span>
-                <span class="placeholder-hint">支持展示高清主机、探头与机身细节</span>
+                <span class="placeholder-hint">支持展示高清硬件、探头与机身细节</span>
               </div>
             </div>
 
@@ -235,7 +237,7 @@ const nextTierDiff = computed(() => {
                 <span class="hero-unit-tag">单位: {{ catalog.selectedDevice.unit || '台' }}</span>
               </div>
               <div class="meta-tags-row">
-                <span class="spec-pill">{{ catalog.selectedDevice.spec || '标准超声主机' }}</span>
+                <span class="spec-pill">{{ catalog.selectedDevice.spec || '标准硬件规格' }}</span>
                 <span v-if="catalog.selectedDevice.power" class="spec-pill subtle">{{ catalog.selectedDevice.power }}</span>
               </div>
             </div>
@@ -292,7 +294,7 @@ const nextTierDiff = computed(() => {
         </div>
         <div v-else class="card-empty-placeholder">
           <Stethoscope :size="32" class="placeholder-icon" />
-          <span>请在上方下拉菜单中选择适用的治疗设备</span>
+          <span>请在上方下拉菜单中选择适用的硬件设备</span>
         </div>
       </div>
 
@@ -300,13 +302,13 @@ const nextTierDiff = computed(() => {
       <div class="product-config-card" :class="{ empty: !catalog.selectedConsumable }">
         <div class="card-head">
           <div class="card-head-picker">
-            <span class="config-tag tone-teal">配套耗材</span>
+            <span class="config-tag tone-teal">耗材 / 消耗品</span>
             <select
               class="card-select"
               :value="catalog.selectedConsumableId ?? ''"
               @change="onConsumableChange"
             >
-              <option value="">请选择配套耗材</option>
+              <option value="">请选择耗材 / 配套商品</option>
               <option v-for="consumable in consumableOptions" :key="consumable.id" :value="consumable.id">
                 {{ consumable.name }}
               </option>
@@ -322,7 +324,7 @@ const nextTierDiff = computed(() => {
               @click="catalog.selectedConsumable.image && openImageModal(resolveImage(catalog.selectedConsumable.image), catalog.selectedConsumable.name, catalog.selectedConsumable.spec)"
             >
               <div class="stage-badges">
-                <span class="badge-tag">配套耗材</span>
+                <span class="badge-tag">耗材 / 消耗品</span>
                 <span v-if="catalog.selectedConsumable.sku" class="badge-sku">{{ catalog.selectedConsumable.sku }}</span>
               </div>
               <template v-if="catalog.selectedConsumable?.image">
@@ -346,7 +348,7 @@ const nextTierDiff = computed(() => {
                   <Boxes :size="38" class="placeholder-icon" />
                 </div>
                 <span class="placeholder-title">实物照片待上传</span>
-                <span class="placeholder-hint">支持展示外箱包装与单片包装实拍</span>
+                <span class="placeholder-hint">支持展示外箱包装与单件实物实拍</span>
               </div>
             </div>
 
@@ -356,7 +358,7 @@ const nextTierDiff = computed(() => {
                 <span class="hero-unit-tag">每箱 {{ catalog.bagsPerBox }} {{ catalog.selectedConsumable.unit || '袋' }}</span>
               </div>
               <div class="meta-tags-row">
-                <span class="spec-pill">{{ catalog.selectedConsumable.spec || '医用耗材' }}</span>
+                <span class="spec-pill">{{ catalog.selectedConsumable.spec || '标准耗材规格' }}</span>
                 <span v-if="catalog.selectedConsumable.piecesPerBag" class="spec-pill subtle">
                   每袋 {{ catalog.selectedConsumable.piecesPerBag }} 片
                 </span>
@@ -416,7 +418,7 @@ const nextTierDiff = computed(() => {
         </div>
         <div v-else class="card-empty-placeholder">
           <Boxes :size="32" class="placeholder-icon" />
-          <span>请在上方下拉菜单中选择适用的配套耗材</span>
+          <span>请在上方下拉菜单中选择适用的耗材 / 消耗品</span>
         </div>
       </div>
     </template>
@@ -426,13 +428,13 @@ const nextTierDiff = computed(() => {
       <div class="product-config-card" :class="{ empty: !catalog.selectedConsumable }">
         <div class="card-head">
           <div class="card-head-picker">
-            <span class="config-tag tone-teal">采购耗材</span>
+            <span class="config-tag tone-teal">采购耗材 / 消耗品</span>
             <select
               class="card-select"
               :value="catalog.selectedConsumableId ?? ''"
               @change="onConsumableChange"
             >
-              <option value="" disabled>请选择耗材</option>
+              <option value="" disabled>请选择耗材 / 消耗品</option>
               <option v-for="consumable in catalog.consumableList" :key="consumable.id" :value="consumable.id">
                 {{ consumable.name }}
               </option>
@@ -448,7 +450,7 @@ const nextTierDiff = computed(() => {
               @click="catalog.selectedConsumable.image && openImageModal(resolveImage(catalog.selectedConsumable.image), catalog.selectedConsumable.name, catalog.selectedConsumable.spec)"
             >
               <div class="stage-badges">
-                <span class="badge-tag">采购耗材</span>
+                <span class="badge-tag">耗材 / 消耗品</span>
                 <span v-if="catalog.selectedConsumable.sku" class="badge-sku">{{ catalog.selectedConsumable.sku }}</span>
               </div>
               <template v-if="catalog.selectedConsumable?.image">
@@ -472,7 +474,7 @@ const nextTierDiff = computed(() => {
                   <Boxes :size="38" class="placeholder-icon" />
                 </div>
                 <span class="placeholder-title">实物照片待上传</span>
-                <span class="placeholder-hint">支持展示外箱包装与单片包装实拍</span>
+                <span class="placeholder-hint">支持展示外箱包装与单件实物实拍</span>
               </div>
             </div>
 
@@ -482,7 +484,7 @@ const nextTierDiff = computed(() => {
                 <span class="hero-unit-tag">每箱 {{ catalog.bagsPerBox }} {{ catalog.selectedConsumable.unit }}</span>
               </div>
               <div class="meta-tags-row">
-                <span class="spec-pill">{{ catalog.selectedConsumable.spec }}</span>
+                <span class="spec-pill">{{ catalog.selectedConsumable.spec || '标准耗材规格' }}</span>
                 <span v-if="catalog.selectedConsumable.piecesPerBag" class="spec-pill subtle">
                   每袋 {{ catalog.selectedConsumable.piecesPerBag }} 片
                 </span>
@@ -579,13 +581,13 @@ const nextTierDiff = computed(() => {
       <div class="product-config-card" :class="{ empty: !catalog.selectedDevice }">
         <div class="card-head">
           <div class="card-head-picker">
-            <span class="config-tag tone-blue">采购设备</span>
+            <span class="config-tag tone-blue">采购硬件 / 设备</span>
             <select
               class="card-select"
               :value="catalog.selectedDeviceId ?? ''"
               @change="onDeviceChange"
             >
-              <option value="" disabled>请选择设备</option>
+              <option value="" disabled>请选择硬件 / 设备</option>
               <option v-for="device in catalog.deviceList" :key="device.id" :value="device.id">
                 {{ device.name }}
               </option>
@@ -601,7 +603,7 @@ const nextTierDiff = computed(() => {
               @click="catalog.selectedDevice.image && openImageModal(resolveImage(catalog.selectedDevice.image), catalog.selectedDevice.name, catalog.selectedDevice.spec)"
             >
               <div class="stage-badges">
-                <span class="badge-tag">采购设备</span>
+                <span class="badge-tag">硬件 / 设备</span>
                 <span v-if="catalog.selectedDevice.sku" class="badge-sku">{{ catalog.selectedDevice.sku }}</span>
               </div>
               <template v-if="catalog.selectedDevice?.image">
@@ -625,7 +627,7 @@ const nextTierDiff = computed(() => {
                   <Stethoscope :size="38" class="placeholder-icon" />
                 </div>
                 <span class="placeholder-title">实物照片待上传</span>
-                <span class="placeholder-hint">支持展示高清主机、探头与机身细节</span>
+                <span class="placeholder-hint">支持展示高清硬件、探头与机身细节</span>
               </div>
             </div>
 
@@ -635,7 +637,7 @@ const nextTierDiff = computed(() => {
                 <span class="hero-unit-tag">单位: {{ catalog.selectedDevice.unit || '台' }}</span>
               </div>
               <div class="meta-tags-row">
-                <span class="spec-pill">{{ catalog.selectedDevice.spec }}</span>
+                <span class="spec-pill">{{ catalog.selectedDevice.spec || '标准硬件规格' }}</span>
                 <span v-if="catalog.selectedDevice.power" class="spec-pill subtle">{{ catalog.selectedDevice.power }}</span>
               </div>
             </div>
@@ -692,14 +694,14 @@ const nextTierDiff = computed(() => {
           <div class="bundle-switch-tip">
             <Gift :size="16" class="tip-icon" />
             <div class="tip-text">
-              搭配耗材采购可享<strong>赠机方案</strong>与更多优惠
+              搭配耗材或配件采购可享<strong>特惠套餐方案</strong>与更多优惠折让
             </div>
             <button
               class="btn btn-sm btn-soft"
               type="button"
               @click="quote.setPurchaseMode('both')"
             >
-              去搭配耗材
+              去搭配耗材/配件
             </button>
           </div>
         </div>
@@ -802,6 +804,38 @@ const nextTierDiff = computed(() => {
         </div>
       </div>
     </template>
+
+    <!-- 5. 配套配件与增值服务选配区（全品类支持） -->
+    <div class="addons-section">
+      <div class="addons-header">
+        <div class="addons-title-group">
+          <Sparkles :size="16" class="addons-icon" />
+          <h4 class="addons-title">配套配件与增值服务选配区</h4>
+          <span class="addons-badge">全品类支持</span>
+        </div>
+        <span class="addons-hint">支持硬件、耗材、关联配件及上门安装/维保培训等增值类目</span>
+      </div>
+
+      <div v-if="(catalog.serviceList && catalog.serviceList.length > 0) || (catalog.accessoryList && catalog.accessoryList.length > 0)" class="addons-grid">
+        <div v-for="item in [...(catalog.accessoryList || []), ...(catalog.serviceList || [])]" :key="item.id" class="addon-card">
+          <div class="addon-badge" :class="item.category">
+            {{ item.category === 'service' ? '增值服务' : '配套配件' }}
+          </div>
+          <div class="addon-info">
+            <strong class="addon-name">{{ item.name }}</strong>
+            <span class="addon-spec">{{ item.spec || '标准规格' }}</span>
+          </div>
+          <div class="addon-pricing">
+            <span class="addon-price">¥{{ formatMoney(item.price || item.minPrice) }}</span>
+            <span class="addon-unit">/{{ item.unit || '项' }}</span>
+          </div>
+        </div>
+      </div>
+      <div v-else class="addons-empty">
+        <Layers :size="18" class="addons-empty-icon" />
+        <span>支持硬件、耗材、配件与培训等全品类商品。可在管理工作台添加并实时同步。</span>
+      </div>
+    </div>
   </div>
 
   <!-- 产品高清实物图放大预览灯箱弹窗 -->
@@ -1742,5 +1776,146 @@ const nextTierDiff = computed(() => {
     transform: scale(1);
   }
 }
+
+.addons-section {
+  grid-column: 1 / -1;
+  margin-top: 10px;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.addons-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.addons-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.addons-icon {
+  color: #6366f1;
+}
+
+.addons-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.addons-badge {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #ede9fe;
+  color: #6366f1;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.addons-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.addons-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.addon-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  gap: 10px;
+}
+
+.addon-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.addon-badge.service {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.addon-badge.accessory {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.addon-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.addon-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.addon-spec {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.addon-pricing {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.addon-price {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.addon-unit {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.addons-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.addons-empty-icon {
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
 
 </style>

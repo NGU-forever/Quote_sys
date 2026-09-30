@@ -11,8 +11,13 @@
 import { reactive } from 'vue'
 import { getBackendBase } from './backendConfig'
 
+function getBridge() {
+  if (typeof window === 'undefined') return null
+  return window.quoteAPI || window.hhzAPI || null
+}
+
 export const isElectron =
-  typeof window !== 'undefined' && Boolean(window.hhzAPI && window.hhzAPI.isElectron)
+  typeof window !== 'undefined' && Boolean(getBridge() && getBridge().isElectron)
 
 const state = reactive({
   // 已成功缓存到本地的相对路径集合（如 products/p1693123456789.jpg）
@@ -27,10 +32,11 @@ export function imageCacheState() {
 
 /** 启动时同步后端图片到本地缓存（Electron 生效；Web 下自动跳过）。 */
 export function syncImages() {
-  if (!isElectron) return Promise.resolve({ ok: false, skipped: true })
+  const bridge = getBridge()
+  if (!isElectron || !bridge?.syncImages) return Promise.resolve({ ok: false, skipped: true })
   if (state.syncing) return state.lastSync
   state.syncing = true
-  state.lastSync = window.hhzAPI
+  state.lastSync = bridge
     .syncImages(getBackendBase())
     .then((result) => {
       if (result && Array.isArray(result.files)) {

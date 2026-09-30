@@ -8,14 +8,14 @@ const router = createRouter({
       path: '/',
       name: 'landing',
       component: () => import('./views/LandingView.vue'),
-      meta: { title: '超声波治疗解决方案' }
+      meta: { title: '商业报价方案' }
     }
   ],
   scrollBehavior: () => ({ top: 0 })
 })
 
 router.afterEach((to) => {
-  document.title = `${to.meta.title || '超声医疗'} - 超声医疗报价平台`
+  document.title = `${to.meta.title || '商业报价'} - QuoteSys 通用商业报价系统`
 })
 
 export default router

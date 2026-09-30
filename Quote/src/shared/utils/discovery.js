@@ -10,10 +10,13 @@ import { setBackendBase } from './backendConfig'
 export async function discoverAndSetHost() {
   if (!isElectron) return null
   try {
-    const host = await window.hhzAPI.discoverHost()
-    if (host) {
-      setBackendBase(host)
-      return host
+    const bridge = typeof window !== 'undefined' ? (window.quoteAPI || window.hhzAPI) : null
+    if (bridge?.discoverHost) {
+      const host = await bridge.discoverHost()
+      if (host) {
+        setBackendBase(host)
+        return host
+      }
     }
   } catch {
     /* ignore */

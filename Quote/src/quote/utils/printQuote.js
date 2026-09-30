@@ -203,7 +203,7 @@ export function buildPrintDocument(data) {
   <div class="sheet">
     <div class="header">
       <div>
-        ${logoHref ? `<img src="${logoHref}" class="logo-img" alt="商标" />` : `<div class="brand-name">${company.name || '超声医疗报价平台'}</div>`}
+        ${logoHref ? `<img src="${logoHref}" class="logo-img" alt="商标" />` : `<div class="brand-name">${company.name || 'QuoteSys 通用商业报价系统'}</div>`}
       </div>
       <div class="contact-info">
         <div>咨询热线：${company.phone || ''}</div>
@@ -211,7 +211,7 @@ export function buildPrintDocument(data) {
         <div>公司地址：${company.address || ''}</div>
       </div>
     </div>
-    <h1>医疗器械报价单</h1>
+    <h1>正式商业报价单</h1>
     <div class="meta">
       <span>报价单号：<strong>${data.id}</strong></span>
       <span>报价日期：<strong>${data.date}</strong></span>

@@ -34,8 +34,11 @@ export const useCatalogStore = defineStore('catalog', {
     selectedDeviceId: initial.deviceId,
     selectedConsumableId: initial.consumableId,
     // 目录列表默认使用内置静态数据；hydrateFromRemote 成功后替换为后端数据库数据
+    allProducts: [...staticProducts],
     deviceList: [...staticDeviceList],
     consumableList: [...staticConsumableList],
+    accessoryList: [],
+    serviceList: [],
     // 生效套餐列表（远程在线/缓存时以后端为准；空目录也保持为空）
     packages: getActivePackages(),
     prices: Object.fromEntries(
@@ -63,8 +66,11 @@ export const useCatalogStore = defineStore('catalog', {
       return (id) => {
         const num = Number(id)
         return (
+          (state.allProducts && state.allProducts.find((product) => product.id === num)) ||
           state.deviceList.find((product) => product.id === num) ||
           state.consumableList.find((product) => product.id === num) ||
+          (state.accessoryList && state.accessoryList.find((product) => product.id === num)) ||
+          (state.serviceList && state.serviceList.find((product) => product.id === num)) ||
           null
         )
       }
@@ -144,15 +150,23 @@ export const useCatalogStore = defineStore('catalog', {
      * 只拉取覆盖，绝不把本地改动写回服务器（母版单向同步）。
      */
     applyRemote(remote) {
-      this.deviceList = remote.products.filter((product) => product.category === 'device')
-      this.consumableList = remote.products.filter((product) => product.category === 'consumable')
+      const isDevice = (p) => p.category === 'device' || p.category === 'hardware'
+      const isConsumable = (p) => p.category === 'consumable'
+      const isAccessory = (p) => p.category === 'accessory'
+      const isService = (p) => p.category === 'service'
+      const products = Array.isArray(remote.products) ? remote.products : []
+      this.allProducts = products
+      this.deviceList = products.filter(isDevice)
+      this.consumableList = products.filter(isConsumable)
+      this.accessoryList = products.filter(isAccessory)
+      this.serviceList = products.filter(isService)
       this.prices = Object.fromEntries(
-        remote.products.map((product) => [product.id, Number(product.price) || 0])
+        products.map((product) => [product.id, Number(product.price) || 0])
       )
       // 设备-耗材绑定：取自后端 device_bindings（设备接口附带 boundConsumables）
       this.bindings = Object.fromEntries(
-        remote.products
-          .filter((product) => product.category === 'device')
+        products
+          .filter(isDevice)
           .map((device) => [device.id, (device.boundConsumables || []).map(Number)])
       )
       setPackages(remote.packages)

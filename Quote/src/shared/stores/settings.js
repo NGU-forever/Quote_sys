@@ -2,10 +2,10 @@ import { defineStore } from 'pinia'
 import { PRICING } from '../data/pricing'
 
 const DEFAULT_COMPANY = {
-  name: '超声医疗报价平台',
-  phone: '400-800-1026',
-  email: 'quote@ultrasound-med.cn',
-  address: '上海市徐汇区医疗科技园'
+  name: 'QuoteSys 通用商业报价系统',
+  phone: '400-800-8888',
+  email: 'service@quotesys.com',
+  address: '高新技术产业开发区创新科技园'
 }
 
 export const useSettingsStore = defineStore('settings', {

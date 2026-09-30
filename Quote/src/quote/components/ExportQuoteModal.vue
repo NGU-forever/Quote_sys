@@ -1,10 +1,12 @@
 <script setup>
 import { computed, nextTick, reactive, ref, watch } from 'vue'
-import { Download, X } from 'lucide-vue-next'
+import { CheckCircle2, CloudUpload, Download, X } from 'lucide-vue-next'
 import { useCatalogStore } from '../../shared/stores/catalog'
 import { useQuoteStore } from '../stores/quote'
 import { formatMoney, today } from '../../shared/utils/format'
 import { moneyText, printQuoteDocument } from '../utils/printQuote'
+import { useToast } from '../../shared/composables/useToast'
+import { api } from '../../shared/api/quoteClient'
 
 const props = defineProps({
   modelValue: {
@@ -24,7 +26,10 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'exported'])
 const quote = useQuoteStore()
 const catalog = useCatalogStore()
+const toast = useToast()
 const customerInputRef = ref(null)
+const serverQuoteNo = ref('')
+const submitting = ref(false)
 
 const exportForm = reactive({
   customerName: '',
@@ -118,8 +123,11 @@ watch(
 )
 
 function initForm() {
-  const savedQuoter = localStorage.getItem('hhz_quoter_name') || ''
-  const savedPhone = localStorage.getItem('hhz_quoter_phone') || ''
+  const savedQuoter =
+    localStorage.getItem('quote_quoter_name') || localStorage.getItem('hhz_quoter_name') || ''
+  const savedPhone =
+    localStorage.getItem('quote_quoter_phone') || localStorage.getItem('hhz_quoter_phone') || ''
+  serverQuoteNo.value = ''
   Object.assign(exportForm, {
     customerName: '',
     contactPerson: '',
@@ -271,6 +279,138 @@ function buildExportData() {
   }
 }
 
+async function handleSubmitServer() {
+  const customerName = exportForm.customerName.trim()
+  if (!customerName) {
+    toast.push('请先填写客户名称 / 机构全称', 'warning')
+    customerInputRef.value?.focus()
+    return
+  }
+
+  if (
+    quote.purchaseMode !== 'package' &&
+    exportForm.scheme === 'package' &&
+    !chosenPackagePlan.value
+  ) {
+    exportForm.scheme = 'plan1'
+    exportForm.planKey = null
+  }
+  if (exportForm.quoter.trim()) {
+    localStorage.setItem('quote_quoter_name', exportForm.quoter.trim())
+  }
+  if (exportForm.quoterPhone.trim()) {
+    localStorage.setItem('quote_quoter_phone', exportForm.quoterPhone.trim())
+  }
+
+  const mode = quote.purchaseMode
+  const plan = chosenPackagePlan.value
+  const directMode = mode === 'package'
+  const packageChosen =
+    exportForm.scheme === 'package' &&
+    (directMode ? Boolean(directPackage.value && directPackageValid.value) : Boolean(plan))
+
+  const itemsSnapshot = []
+  if (directMode && directPackageValid.value) {
+    directPackageRows.value.forEach((item) => {
+      const qty = (Number(item.quantity) || 1) * quote.packageSets
+      const unitPrice = Number(item.price || 0)
+      itemsSnapshot.push({
+        sku_id: item.sku || `ITEM-${item.id || item.productId}`,
+        name: item.name,
+        category: item.category || 'package_item',
+        spec: item.spec || '-',
+        unit: item.unit || '套',
+        quantity: qty,
+        price: unitPrice,
+        subtotal: Math.round(unitPrice * qty * 100) / 100,
+        remark: '套餐整购明细'
+      })
+    })
+  } else {
+    if (mode !== 'consumables' && catalog.selectedDevice) {
+      const d = catalog.selectedDevice
+      const unitPrice = packageChosen
+        ? Number(exportForm.deviceUnit) || 0
+        : (catalog.devicePrice || 0)
+      const qty = quote.devices
+      itemsSnapshot.push({
+        sku_id: d.sku || `DEV-${d.id}`,
+        name: d.name,
+        category: d.category || 'hardware',
+        spec: d.spec || '-',
+        unit: d.unit || '台',
+        quantity: qty,
+        price: unitPrice,
+        subtotal: Math.round(unitPrice * qty * 100) / 100,
+        remark: packageChosen ? '套餐内设备' : '独立采购设备'
+      })
+    }
+    if (mode !== 'equipment' && catalog.selectedConsumable) {
+      const c = catalog.selectedConsumable
+      const unitPrice = packageChosen
+        ? Number(exportForm.consumableUnit) || 0
+        : (quote.plan1UnitPrice || 0)
+      const bags = catalog.bagsPerBox || 1
+      const totalBags = quote.boxes * bags
+      itemsSnapshot.push({
+        sku_id: c.sku || `CSM-${c.id}`,
+        name: c.name,
+        category: c.category || 'consumable',
+        spec: c.spec || '-',
+        unit: c.unit || '袋',
+        quantity: totalBags,
+        price: unitPrice,
+        subtotal: Math.round(unitPrice * totalBags * 100) / 100,
+        remark: `${quote.boxes} 箱（每箱 ${bags} ${c.unit || '袋'}）`
+      })
+    }
+  }
+
+  const standardTotal = exportStandardTotal.value
+  const paidTotal = exportPaidTotal.value
+  const discountRate =
+    standardTotal > 0 ? Math.round((paidTotal / standardTotal) * 100) / 100 : 1.0
+
+  const payload = {
+    customer_name: customerName,
+    customer_contact: exportForm.contactPerson.trim() || undefined,
+    customer_phone: exportForm.contactPhone.trim() || undefined,
+    sales_name: exportForm.quoter.trim() || undefined,
+    sales_phone: exportForm.quoterPhone.trim() || undefined,
+    status: 'submitted',
+    total_list_price: standardTotal,
+    discount_rate: discountRate,
+    final_quote_price: paidTotal,
+    valid_days: 30,
+    remark: chosenPackagePlan.value?.pkg.name
+      ? `选定方案：${chosenPackagePlan.value.pkg.name}`
+      : undefined,
+    items_snapshot: itemsSnapshot
+  }
+
+  submitting.value = true
+  try {
+    const result = await api.createQuote(payload)
+    if (result && result.quote_no) {
+      serverQuoteNo.value = result.quote_no
+      quote.saveQuote({
+        quote_no: result.quote_no,
+        customer_name: customerName,
+        customer_contact: exportForm.contactPerson.trim(),
+        final_quote_price: paidTotal
+      })
+      toast.push(`报价单已成功保存至服务器！官方单号：${result.quote_no}`, 'success')
+      emit('exported', { ...buildExportData(), serverQuoteNo: result.quote_no })
+    } else {
+      toast.push('报价单已提交，但未返回官方单号', 'info')
+    }
+  } catch (err) {
+    toast.push(`提交至服务器失败：${err.message}`, 'error')
+  } finally {
+    submitting.value = false
+  }
+}
+
 function handleGenerate() {
   if (
     quote.purchaseMode !== 'package' &&
@@ -281,14 +421,22 @@ function handleGenerate() {
     exportForm.planKey = null
   }
   if (exportForm.quoter.trim()) {
-    localStorage.setItem('hhz_quoter_name', exportForm.quoter.trim())
+    localStorage.setItem('quote_quoter_name', exportForm.quoter.trim())
   }
   if (exportForm.quoterPhone.trim()) {
-    localStorage.setItem('hhz_quoter_phone', exportForm.quoterPhone.trim())
+    localStorage.setItem('quote_quoter_phone', exportForm.quoterPhone.trim())
   }
 
   const data = buildExportData()
-  quote.saveQuote()
+  if (serverQuoteNo.value) {
+    data.id = serverQuoteNo.value
+  }
+  quote.saveQuote({
+    quote_no: serverQuoteNo.value || undefined,
+    customer_name: exportForm.customerName.trim(),
+    customer_contact: exportForm.contactPerson.trim(),
+    final_quote_price: exportPaidTotal.value
+  })
   close()
   if (props.iframeEl) {
     printQuoteDocument(data, props.iframeEl)
@@ -308,6 +456,12 @@ function handleGenerate() {
       </header>
 
       <div class="export-modal-body">
+        <div v-if="serverQuoteNo" class="server-quote-banner">
+          <CheckCircle2 :size="16" class="server-quote-icon" />
+          <span>已正式保存至服务器数据库，官方单号：</span>
+          <strong class="server-quote-no">{{ serverQuoteNo }}</strong>
+        </div>
+
         <div class="export-section">
           <h4 class="export-section-title">客户信息</h4>
           <div class="export-grid-stack">
@@ -603,7 +757,16 @@ function handleGenerate() {
 
       <footer class="export-modal-foot">
         <button type="button" class="btn" @click="close">取消</button>
-        <button type="button" class="btn btn-primary" @click="handleGenerate">
+        <button
+          type="button"
+          class="btn btn-outline submit-server-btn"
+          :disabled="submitting"
+          @click="handleSubmitServer"
+        >
+          <CloudUpload :size="16" />
+          {{ submitting ? '正在提交服务器…' : (serverQuoteNo ? '重新提交至服务器' : '保存并提交报价单至服务器') }}
+        </button>
+        <button type="button" class="btn btn-primary" :disabled="submitting" @click="handleGenerate">
           <Download :size="16" />
           生成并打印报价单
         </button>
@@ -914,5 +1077,40 @@ function handleGenerate() {
   padding: 14px 20px;
   border-top: 1px solid var(--border);
   background: #f8fafc;
+}
+
+.server-quote-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 10px;
+  color: #065f46;
+  font-size: 13px;
+}
+
+.server-quote-icon {
+  color: #059669;
+  flex-shrink: 0;
+}
+
+.server-quote-no {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 14px;
+  font-weight: 700;
+  color: #047857;
+  letter-spacing: 0.5px;
+}
+
+.submit-server-btn {
+  color: var(--primary-dark);
+  border-color: rgba(30, 136, 229, 0.4);
+  background: #fff;
+}
+.submit-server-btn:hover:not(:disabled) {
+  background: #f0f7ff;
+  border-color: var(--primary);
 }
 </style>

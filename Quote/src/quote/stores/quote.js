@@ -5,8 +5,9 @@ import { clamp, today } from '../../shared/utils/format'
 import { useCatalogStore } from '../../shared/stores/catalog'
 import { useSettingsStore } from '../../shared/stores/settings'
 
-// 报价草稿本机持久化键：独立命名空间，仅存本设备；绝不写入服务器数据库
-const LOCAL_QUOTES_KEY = 'hhz_local_quotes_v1'
+// 报价草稿本机持久化键：独立命名空间，仅存本设备；支持与服务器单号联动
+const LOCAL_QUOTES_KEY = 'quote_local_quotes_v1'
+const LEGACY_LOCAL_QUOTES_KEY = 'hhz_local_quotes_v1'
 
 function toNumber(value) {
   if (value === '' || value === null || value === undefined) return null
@@ -28,13 +29,13 @@ function boxCount(quantity, unitsPerBox) {
  */
 function packageUnitMetrics(pkg, selectedDeviceId, selectedConsumableId) {
   const fixedBundle = Boolean(pkg.fixedBundle)
-  const items = Array.isArray(pkg.items) ? pkg.items : []
-  const deviceItems = items.filter((item) => item.category === 'device')
+  const isDevice = (cat) => cat === 'device' || cat === 'hardware'
+  const deviceItems = items.filter((item) => isDevice(item.category))
   const consumableItems = fixedBundle
-    ? items.filter((item) => item.category !== 'device')
+    ? items.filter((item) => !isDevice(item.category))
     : items.filter(
         (item) =>
-          item.category !== 'device' &&
+          !isDevice(item.category) &&
           toNumber(item.productId ?? item.id) === toNumber(selectedConsumableId)
       )
 
@@ -78,7 +79,11 @@ function packageUnitMetrics(pkg, selectedDeviceId, selectedConsumableId) {
 /** 从本机读取已保存报价草稿；缺失/损坏时返回 null（静默降级为无草稿） */
 function loadLocalQuotes() {
   try {
-    const data = JSON.parse(localStorage.getItem(LOCAL_QUOTES_KEY) || 'null')
+    const raw =
+      localStorage.getItem(LOCAL_QUOTES_KEY) ||
+      localStorage.getItem(LEGACY_LOCAL_QUOTES_KEY) ||
+      'null'
+    const data = JSON.parse(raw)
     return data && Array.isArray(data.savedQuotes) ? data : null
   } catch {
     return null
@@ -357,15 +362,19 @@ export const useQuoteStore = defineStore('quote', {
         // 本机存储不可用（隐私模式/磁盘满）时静默降级，不影响本次报价
       }
     },
-    saveQuote() {
+    saveQuote(extra = {}) {
       const directPackage = this.purchaseMode === 'package' ? this.activePackage : null
       const chosen =
         (directPackage ? { pkg: directPackage } : null) ||
         this.bestPackagePlan ||
         this.packagePlans[0] ||
         null
+      const serverQuoteNo = extra?.quote_no || extra?.id || null
       const quote = {
-        id: `${this.settings.quotePrefix}${String(Date.now()).slice(-6)}`,
+        id: serverQuoteNo || `${this.settings.quotePrefix}${String(Date.now()).slice(-6)}`,
+        quoteNo: serverQuoteNo,
+        customerName: extra?.customer_name || extra?.customerName || '',
+        contactPerson: extra?.customer_contact || extra?.contactPerson || '',
         date: today(),
         boxes: this.boxes,
         devices: this.devices,
@@ -379,12 +388,13 @@ export const useQuoteStore = defineStore('quote', {
           : (this.bestPackagePlan?.gifted ?? this.packagePlans[0]?.gifted ?? 0),
         betterPlan: directPackage ? 'package' : this.betterPlan,
         mode: this.purchaseMode,
-        total: this.currentBestTotal,
+        total: extra?.final_quote_price || this.currentBestTotal,
         hasPackage: directPackage ? Boolean(directPackage) : this.hasPackage,
         packageId: chosen?.pkg.id || null,
         packageName: chosen?.pkg.name || null,
         packageNote: chosen?.pkg.note || '',
-        packageSets: directPackage ? this.packageSets : null
+        packageSets: directPackage ? this.packageSets : null,
+        syncedToServer: Boolean(serverQuoteNo)
       }
       this.savedQuotes.unshift(quote)
       this.lastSaved = quote

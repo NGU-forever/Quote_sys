@@ -1,11 +1,11 @@
 {
-  "name": "hhz-ultrasound-quote-platform",
+  "name": "quotesys-client",
   "private": true,
   "version": "2.0.0",
   "type": "module",
   "main": "electron/main.cjs",
-  "description": "超声医疗报价平台桌面安装版",
-  "author": "HHZ",
+  "description": "QuoteSys 通用商业报价系统桌面客户端",
+  "author": "QuoteSys",
   "scripts": {
     "dev": "concurrently -k -n server,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
     "dev:web": "vite",
@@ -41,8 +41,8 @@
     "vite": "^5.4.11"
   },
   "build": {
-    "appId": "com.ultrasound.quote",
-    "productName": "超声医疗报价平台",
+    "appId": "com.quotesys.app",
+    "productName": "QuoteSys 通用商业报价系统",
     "directories": {
       "output": "release"
     },
