@@ -2,7 +2,7 @@
 import json
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.agent.readers.common import file_kind, safe_file_path
@@ -139,19 +139,23 @@ def _lookup_existing(db: Session, args: dict) -> dict:
             "count": len(rows),
             "items": [map_package(p) for p in rows],
         }
-    products = db.scalars(select(Product)).all()
-    packages = db.scalars(select(Package)).all()
     from app.models.device_binding import DeviceBinding
 
-    bindings = db.scalars(select(DeviceBinding)).all()
+    total = db.scalar(select(func.count()).select_from(Product)) or 0
+    devices = (
+        db.scalar(
+            select(func.count()).select_from(Product).where(Product.category == "device")
+        )
+        or 0
+    )
     return {
         "ok": True,
         "entity": "stats",
-        "products": len(products),
-        "devices": sum(1 for p in products if p.category == "device"),
-        "consumables": sum(1 for p in products if p.category == "consumable"),
-        "packages": len(packages),
-        "bindings": len(bindings),
+        "products": int(total),
+        "devices": int(devices),
+        "consumables": int(total) - int(devices),
+        "packages": int(db.scalar(select(func.count()).select_from(Package)) or 0),
+        "bindings": int(db.scalar(select(func.count()).select_from(DeviceBinding)) or 0),
     }
 
 
@@ -255,86 +259,6 @@ TOOL_SCHEMAS = [
                 "properties": {"description": {"type": "string"}},
                 "required": ["description"],
             },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "propose_candidates",
-            "description": "提交规范化候选 JSON（唯一受控写库入口；服务端校验后才可入库）",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "products": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "properties": {
-                                "sku_id": {"type": "string"},
-                                "category": {"type": "string", "enum": ["device", "consumable"]},
-                                "name": {"type": "string"},
-                                "min_price": {"type": ["number", "null"]},
-                                "max_price": {"type": ["number", "null"]},
-                                "unit": {"type": ["string", "null"]},
-                                "pieces_per_unit": {"type": ["integer", "null"]},
-                                "units_per_box": {"type": ["integer", "null"]},
-                                "box_price": {"type": ["number", "null"]},
-                                "applicable_devices": {"type": ["string", "null"]},
-                                "raw_price_desc": {"type": ["string", "null"]},
-                                "remark": {"type": ["string", "null"]},
-                                "image": {"type": ["string", "null"]},
-                            },
-                            "required": ["sku_id", "category", "name"],
-                        },
-                    },
-                    "packages": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "properties": {
-                                "package_id": {"type": "string"},
-                                "name": {"type": "string"},
-                                "sku_ids": {"type": "array", "items": {"type": "string"}},
-                                "quantities": {"type": "array", "items": {"type": "number"}},
-                                "std_price": {"type": ["number", "null"]},
-                                "discount_price": {"type": ["number", "null"]},
-                                "discount_rate": {"type": ["string", "null"]},
-                                "device_qty": {"type": ["integer", "null"]},
-                                "consumable_qty": {"type": ["integer", "null"]},
-                                "consumable_boxes": {"type": ["integer", "null"]},
-                                "fixed_bundle": {"type": ["boolean", "integer"]},
-                                "device_price": {"type": ["number", "null"]},
-                                "note": {"type": ["string", "null"]},
-                            },
-                            "required": ["package_id", "name", "sku_ids", "quantities"],
-                        },
-                    },
-                    "bindings": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "properties": {
-                                "device_sku_id": {"type": "string"},
-                                "consumable_sku_id": {"type": "string"},
-                            },
-                            "required": ["device_sku_id", "consumable_sku_id"],
-                        },
-                    },
-                    "issues": {"type": "array", "items": {"type": "string"}},
-                },
-                "required": ["products", "packages", "bindings", "issues"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "finish",
-            "description": "候选已通过服务端校验后结束 ReAct，进入事务 apply/report",
-            "parameters": {"type": "object", "properties": {}},
         },
     },
 ]

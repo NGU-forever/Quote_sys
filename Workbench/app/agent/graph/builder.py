@@ -29,7 +29,7 @@ def build_import_graph(runtime: GraphRuntime, checkpointer):
     )
     graph.add_node(
         "profiler_node",
-        lambda state: (runtime.ensure_active(), profiler_node(state))[1],
+        lambda state: profiler_node(state, runtime),
     )
     graph.add_node(
         "extract_products_node",

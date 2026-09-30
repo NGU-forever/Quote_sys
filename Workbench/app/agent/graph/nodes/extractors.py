@@ -9,12 +9,11 @@ from app.agent.readers.excel_reader import read_excel
 from app.agent.readers.text_reader import read_csv, read_markdown, read_text
 from app.agent.readers.word_reader import read_word
 from app.agent.schemas import BindingCandidate, PackageCandidate, ProductCandidate
+from app.agent.schema_utils import inline_json_schema
 
 
 def _item_schema(model) -> dict:
-    schema = model.model_json_schema()
-    schema.pop("$defs", None)
-    return schema
+    return inline_json_schema(model.model_json_schema())
 
 
 def _tool_schema(tool_name: str, item_key: str, model, description: str) -> dict:

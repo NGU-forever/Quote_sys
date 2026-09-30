@@ -1,47 +1,45 @@
-"""Agent Prompt 模板：目标 schema、业务规则与动态用户上下文。"""
+"""Agent Prompt 模板（prompt_version 随运行报告落库，便于回归对比）。"""
 import json
 
 from app.core.config import settings
 
 
-def system_prompt() -> str:
-    return f"""你是 Workbench 数据库生成 Agent（Prompt 版本：{settings.agent_prompt_version}）。
-你的任务：只从管理员放入 assets 目录的 Word / Excel / CSV / Markdown 资料中读取真实内容，
-整理为符合 Workbench 规范化结构的候选 JSON；你不允许直接写数据库，也不允许从示例中抄袭商品。
+def profiler_system_prompt(max_steps: int) -> str:
+    """来源定位节点（工具循环）的系统提示。"""
+    return f"""你是 Workbench 数据导入的来源定位 Agent（Prompt 版本：{settings.agent_prompt_version}）。
+你的唯一目标：在 assets 目录中**定位**能提供商品、套餐、设备-耗材绑定的资料位置，并提交来源计划。
+你不提取数据、不写数据库。
 
-唯一可写目标结构：
-1. products（设备 + 耗材统一表）：字段只能是 sku_id、category（device/consumable）、name、min_price、
-max_price、unit、pieces_per_unit、units_per_box、box_price、applicable_devices、raw_price_desc、remark、image。
-sku_id 必须非空且唯一；类别必须二选一；价格必须是数字或空；无法确定口径时置空并调用 report_issue。
-min_price 是报价下限，资料里的“成本/折扣/旧挂牌价”不能随意写入 min_price。
-单位、每箱数量必须来自可追溯资料；拿不准时置空并 report_issue。
-2. device_bindings：字段 device_sku_id、consumable_sku_id，两侧必须分别引用本批候选或现有库中的
-设备/耗材；只依据“适用设备/适用耗材/套餐定义”生成绑定，不能推测。
-3. packages：字段 package_id、name、sku_ids（JSON 数组）、quantities（与 sku_ids 等长）、std_price、
-discount_price、discount_rate、device_qty、consumable_qty、consumable_boxes、fixed_bundle（0/1）、
-device_price、note。套餐内引用的 SKU 不能虚拟创建；quantities 与 sku_ids 长度必须一致。
-固定整购（fixed_bundle=1）表示整套包含全部明细；未勾选的赠机/推广套餐通常表示耗材任选其一或赠送规则。
-备注或上下文自相矛盾（例如“本套餐不存在/无赠送方案”）时不要创建套餐，改为 report_issue。
+工作方式（ReAct）：
+1. 每一步先用一句话说明判断依据，再调用**一个**工具；
+2. 只有真正读到内容才能把某个文件/工作表/章节列为来源；
+3. Observation 标记 truncated 时必须缩小 range 或改用 search_text；
+4. 资料缺失、口径冲突、无法判定归属时用 report_issue 记录，不要臆测；
+5. 来源齐备后调用 submit_sources_plan 提交。
 
-行为约束：
-- 每一步先给出简短 Thought（判断/下一步依据），再选择一个工具。
-- 一次不要读取超大范围；Observation 标记 truncated 时必须缩小 range 或改用 search_text。
-- 只有真正读到的内容可以进入候选；资料缺失/歧义用 report_issue 记录，不静默捏造。
-- 候选通过服务端校验后调用 finish；校验失败按 Observation 中的错误修正后重新 propose_candidates。
+硬约束：
+- 最多 {max_steps} 步模型调用，超限服务端会按规则兜底并记录 issue；
+- submit_sources_plan 中的 file 必须是清单里出现过的文件路径，locator 只能是该文件真实存在的
+  工作表名/章节名，服务端会逐条校验，不合法的条目会被丢弃；
+- 宁可少列来源，也不要指向没有依据的文件。
 """
 
 
-def user_prompt(manifest: dict, stats: dict, conflict_policy: str) -> str:
-    supported = [f for f in manifest.get("files", []) if f["supported"]]
+def profiler_user_prompt(manifest: dict, stats: dict, conflict_policy: str) -> str:
+    """来源定位节点的用户上下文：文件清单 + 现有库规模 + 冲突策略。"""
+    supported = [f for f in manifest.get("files", []) if f.get("supported")]
+    unsupported = [f for f in manifest.get("files", []) if not f.get("supported")]
     return json.dumps(
         {
-            "assets": supported,
+            "assets_files": supported,
+            "unsupported_files": [f.get("path") for f in unsupported],
             "existing_db_stats": stats,
             "conflict_policy": conflict_policy,
             "prompt_version": settings.agent_prompt_version,
             "instruction": (
-                "读取上面清单中最相关的文件/工作表，提取 Workbench 规范化候选。"
-                "先观察文件结构，再按需读取明细，最后调用 propose_candidates 和 finish。"
+                "先观察文件清单，必要时用 list_assets / read_excel / read_word / search_text 探测结构，"
+                "再用 lookup_existing 确认库内已有 SKU，最后调用 submit_sources_plan 提交"
+                " products / packages / bindings 三类来源。"
             ),
         },
         ensure_ascii=False,

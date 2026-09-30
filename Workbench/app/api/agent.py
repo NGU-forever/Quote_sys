@@ -175,6 +175,24 @@ def get_run(run_id: int, db: Session = Depends(get_db), _: User = Depends(requir
     return {"data": agent_service.run_to_dict(db, run)}
 
 
+@router.post("/runs/{run_id}/resume")
+def resume_run(run_id: int, db: Session = Depends(get_db), _: User = Depends(require_user)):
+    """从检查点续跑中断的运行（进程重启/异常中断后不必从头再来）。"""
+    run = db.get(ImportRun, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="运行记录不存在")
+    if run.status == "running":
+        raise HTTPException(status_code=409, detail="该任务仍在运行中")
+    if agent_service.has_active_run():
+        raise HTTPException(status_code=409, detail="已有 Agent 任务正在运行，请稍候")
+    try:
+        agent_service.start_background(run_id, resume=True)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    db.refresh(run)
+    return {"data": agent_service.run_to_dict(db, run)}
+
+
 @router.post("/runs/{run_id}/cancel")
 def cancel_run(run_id: int, db: Session = Depends(get_db), _: User = Depends(require_user)):
     run = db.get(ImportRun, run_id)

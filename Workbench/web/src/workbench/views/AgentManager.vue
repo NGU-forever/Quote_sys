@@ -372,6 +372,27 @@ async function cancelRun() {
   }
 }
 
+const resuming = ref(false)
+const resumableRun = computed(() =>
+  ['failed', 'cancelled', 'pending'].includes(detailRun.value?.status)
+)
+
+async function resumeRun() {
+  if (!detailRun.value) return
+  resuming.value = true
+  try {
+    const { data } = await api.agentResumeRun(detailRun.value.id)
+    activeRun.value = data
+    detailRun.value = data
+    startPolling()
+    toast.push('已从检查点继续运行', 'info')
+  } catch (err) {
+    toast.push(err.message || '续跑失败（可能已无可续跑的检查点）', 'info')
+  } finally {
+    resuming.value = false
+  }
+}
+
 function startPolling() {
   stopPolling()
   pollTimer = window.setInterval(pollTick, 1500)
@@ -799,6 +820,20 @@ onBeforeUnmount(stopPolling)
               <span class="agent-label">耗时</span>
               <strong>{{ detailRun.finished_at ? '已结束' : '进行中' }}</strong>
             </div>
+            <div v-if="detailRun.llm?.calls">
+              <span class="agent-label">LLM 调用</span>
+              <strong>{{ detailRun.llm.calls }} 次 / {{ detailRun.llm.total_tokens }} tokens</strong>
+            </div>
+            <div v-if="detailRun.llm?.calls">
+              <span class="agent-label">模型耗时 / 成本</span>
+              <strong>
+                {{ (detailRun.llm.latency_ms / 1000).toFixed(1) }}s<template
+                  v-if="detailRun.llm.cost"
+                >
+                  · {{ detailRun.llm.cost }} {{ detailRun.llm.currency }}</template
+                >
+              </strong>
+            </div>
           </div>
 
           <div v-if="detailRun.report?.issues?.length" class="agent-issues">
@@ -1000,6 +1035,15 @@ onBeforeUnmount(stopPolling)
       </template>
 
       <template #footer>
+        <button
+          v-if="resumableRun"
+          class="btn btn-outline btn-sm"
+          :disabled="resuming"
+          @click="resumeRun"
+        >
+          <RefreshCw :size="14" />
+          {{ resuming ? '续跑中…' : '从检查点续跑' }}
+        </button>
         <button class="btn btn-soft btn-sm" @click="detailRun = null">
           {{ detailRun?.mode === 'dry-run' && detailRun?.status === 'succeeded' ? '暂不入库' : '关闭' }}
         </button>

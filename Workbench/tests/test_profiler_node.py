@@ -7,9 +7,20 @@ from unittest.mock import patch
 from docx import Document
 
 from app.agent.readers.manifest import build_manifest
+from app.agent.graph.runtime import GraphRuntime
 from app.agent.graph.state import AgentGraphState
 from app.agent.graph.nodes.profiler import profiler_node
 from app.core.config import settings
+
+
+def _runtime() -> GraphRuntime:
+    """离线 Mock 场景：不启用工具循环，走确定性规则定位。"""
+    return GraphRuntime(
+        provider=None,
+        provider_name="mock",
+        db=None,
+        cancel_check=lambda: False,
+    )
 
 
 def _state(manifest: dict) -> AgentGraphState:
@@ -47,7 +58,7 @@ class ProfilerNodeTests(unittest.TestCase):
             wb.save(root / "产品最低价格.xlsx")
 
             with patch.object(settings, "assets_dir", str(root)):
-                result = profiler_node(_state(build_manifest(root)))
+                result = profiler_node(_state(build_manifest(root)), _runtime())
 
             plan = result["sources_plan"]
             self.assertTrue(
@@ -82,7 +93,7 @@ class ProfilerNodeTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with patch.object(settings, "assets_dir", tmp):
-                result = profiler_node(_state(build_manifest(root)))
+                result = profiler_node(_state(build_manifest(root)), _runtime())
 
         plan = result["sources_plan"]
         self.assertTrue(any(item["file"] == "notes.md" for item in plan["products"]))
@@ -114,7 +125,7 @@ class ProfilerNodeTests(unittest.TestCase):
             doc.save(root / "business.docx")
 
             with patch.object(settings, "assets_dir", tmp):
-                result = profiler_node(_state(build_manifest(root)))
+                result = profiler_node(_state(build_manifest(root)), _runtime())
 
         plan = result["sources_plan"]
         self.assertTrue(any(item["file"] == "business.docx" for item in plan["products"]))
@@ -135,7 +146,7 @@ class ProfilerNodeTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with patch.object(settings, "assets_dir", tmp):
-                result = profiler_node(_state(build_manifest(root)))
+                result = profiler_node(_state(build_manifest(root)), _runtime())
 
         self.assertEqual(result["sources_plan"]["packages"], [])
 

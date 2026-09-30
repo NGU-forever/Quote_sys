@@ -2,6 +2,7 @@
 import json
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.base import now_str
@@ -64,15 +65,52 @@ def _candidate_diff(field_names: list[str], existing, candidate: dict, existing_
 
 
 def apply_candidates(db: Session, candidates: dict, mode: str, allow_name_update: bool = False) -> dict:
-    """dry-run 返回“将会”统计；apply 用单事务写入正式业务表。"""
-    products = db.scalars(select(Product)).all()
-    product_by_sku = {p.sku_id: p for p in products}
-    packages = db.scalars(select(Package)).all()
-    package_by_id = {p.package_id: p for p in packages}
-    existing_bindings = {
-        (b.device_sku_id, b.consumable_sku_id)
-        for b in db.scalars(select(DeviceBinding)).all()
+    """dry-run 返回“将会”统计；apply 用单事务写入正式业务表。
+
+    规模与并发：
+    - 只按候选集涉及的 SKU / 套餐 ID 取数，不再把整表读进内存；
+    - ``FOR UPDATE`` 锁定待改动的行，避免多进程/多 worker 下的读-改-写互相覆盖；
+    - 同一进程内另有 ``agent_service`` 的活跃运行互斥，二者叠加覆盖跨进程场景。
+    """
+    candidate_products = list(candidates.get("products") or [])
+    candidate_packages = list(candidates.get("packages") or [])
+    candidate_bindings = list(candidates.get("bindings") or [])
+
+    product_skus = [str(p.get("sku_id")) for p in candidate_products if p.get("sku_id")]
+    package_ids = [str(p.get("package_id")) for p in candidate_packages if p.get("package_id")]
+    binding_keys = {
+        (str(b.get("device_sku_id")), str(b.get("consumable_sku_id")))
+        for b in candidate_bindings
+        if b.get("device_sku_id") and b.get("consumable_sku_id")
     }
+
+    product_by_sku: dict[str, Product] = {}
+    if product_skus:
+        product_by_sku = {
+            row.sku_id: row
+            for row in db.scalars(
+                select(Product).where(Product.sku_id.in_(product_skus)).with_for_update()
+            ).all()
+        }
+    package_by_id: dict[str, Package] = {}
+    if package_ids:
+        package_by_id = {
+            row.package_id: row
+            for row in db.scalars(
+                select(Package).where(Package.package_id.in_(package_ids)).with_for_update()
+            ).all()
+        }
+    existing_bindings: set[tuple[str, str]] = set()
+    if binding_keys:
+        device_ids = {key[0] for key in binding_keys}
+        existing_bindings = {
+            (row.device_sku_id, row.consumable_sku_id)
+            for row in db.execute(
+                select(DeviceBinding.device_sku_id, DeviceBinding.consumable_sku_id).where(
+                    DeviceBinding.device_sku_id.in_(device_ids)
+                )
+            ).all()
+        }
 
     result = {
         "mode": mode,
@@ -87,7 +125,7 @@ def apply_candidates(db: Session, candidates: dict, mode: str, allow_name_update
         "issues": list(candidates.get("issues", [])),
     }
 
-    for product in candidates.get("products", []):
+    for product in candidate_products:
         existing = product_by_sku.get(product["sku_id"])
         if existing is None:
             result["products_added"] += 1
@@ -134,7 +172,7 @@ def apply_candidates(db: Session, candidates: dict, mode: str, allow_name_update
             setattr(existing, field, value)
         existing.updated_at = now_str()
 
-    for binding in candidates.get("bindings", []):
+    for binding in candidate_bindings:
         key = (binding["device_sku_id"], binding["consumable_sku_id"])
         if key in existing_bindings:
             result["bindings_skipped"] += 1
@@ -148,7 +186,7 @@ def apply_candidates(db: Session, candidates: dict, mode: str, allow_name_update
                 )
             )
 
-    for package in candidates.get("packages", []):
+    for package in candidate_packages:
         existing = package_by_id.get(package["package_id"])
         if existing is None:
             result["packages_added"] += 1
@@ -200,5 +238,12 @@ def apply_candidates(db: Session, candidates: dict, mode: str, allow_name_update
         existing.updated_at = now_str()
 
     if mode == "apply":
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError as exc:
+            # 并发写入撞唯一键：回滚并用明确错误暴露，避免留下半截数据
+            db.rollback()
+            raise RuntimeError(
+                f"入库冲突：候选数据与并发写入重复（{type(exc.orig).__name__}），已整体回滚"
+            ) from exc
     return result

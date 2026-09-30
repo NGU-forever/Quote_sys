@@ -21,3 +21,5 @@ class AgentGraphState(TypedDict, total=False):
     status: str
     apply_result: dict
     report: dict
+    # 工具循环轨迹（用于落运行事件，让 ReAct 过程可审计）
+    react_trace: Annotated[list[dict], operator.add]

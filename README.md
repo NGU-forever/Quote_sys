@@ -31,6 +31,7 @@
 - 👥 **多角色权限隔离与协同闭环**：
   - **管理端（Admin）**：商品字典维护、底价把控、员工账号启用/停用、全公司报价单归档与导出。
   - **销售端（Sales）**：专属账号登录、报价单草稿暂存、一键生成 PDF/打印预览；行级数据隔离，销售员仅可查阅属于自己的报价单历史。
+- 🤖 **AI 资料导入 Agent（LangGraph）**：把 Word/Excel/CSV/Markdown 价目资料自动整理入库。模型在**有界工具循环**中自主定位来源（Observation 回灌 + `max_steps` 硬上限 + 规则兜底），只产出结构化候选、**无任何写库权限**；服务端硬校验门禁 + 带精确错误的有界自愈（最多 3 次，且不得凭空新增数据）；PostgreSQL 检查点支持中断续跑；每次调用的 token/耗时/成本全量计量。附 19 个 golden case 的评测脚本输出 P/R/F1、字段准确率、幻觉率与单次成本。
 - 📡 **局域网双机自动探测与离线协同**：销售端集成 UDP 广播智能嗅探母机服务（`0.0.0.0:8000`），无外网环境亦可通过一根网线或移动热点即连即用。
 - 🖥 **跨平台全端覆盖**：
   - **后台工作台 (`quotesys-workbench-web`)**：基于 Vue 3 + Pinia + Lucide 的响应式 Web 现代管理后台。
@@ -260,9 +261,12 @@ Quote_Sys/
 # 1. 先启动 PostgreSQL（测试库会自动创建，连接串见 Workbench/tests/db_support.py）
 docker compose up -d postgres
 
-# 2. 执行全部 68 项自动化测试
+# 2. 执行全部 109 项自动化测试
 cd Workbench && .venv/bin/python -m pytest tests -q
 # 自定义测试库：TEST_DATABASE_URL=postgresql+psycopg://user:pwd@host:5432/quotesys_test
+
+# 3. Agent 评测（19 个 golden case，离线可跑，CI 门禁）
+.venv/bin/python -m eval.run_eval --provider scripted --enforce
 ```
 
 测试覆盖清单：
@@ -270,6 +274,11 @@ cd Workbench && .venv/bin/python -m pytest tests -q
 - ✅ `test_infra.py`：PostgreSQL 连接、健康检查与 Redis 优雅降级探测
 - ✅ `test_quote_api.py`：报价创建、底价校验、多角色行级权限隔离、防重复自增号
 - ✅ `test_extractors.py` & `test_quality_nodes.py`：AI 资料导入与规则校验
+- ✅ `test_profiler_react.py`：来源定位工具循环（Observation 回灌、max_steps 硬上限、工具异常降级、规则兜底）
+- ✅ `test_tool_schemas.py`：发给模型的 function schema 无 `$ref`/`$defs` 残留（strict 服务端 400 回归）
+- ✅ `test_llm_metrics.py`：token/耗时/成本计量与"测试环境禁止真实付费调用"防护
+- ✅ `test_agent_resume.py`：节点中断后从 PostgresSaver 检查点续跑且不重跑已完成节点
+- ✅ `test_eval_gate.py` & `test_eval_scoring.py`：Agent 评测门禁与打分口径
 
 ---
 

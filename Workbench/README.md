@@ -147,6 +147,72 @@ VALUES ('1.4.0', 'windows', 'https://your-cdn.com/app-v1.4.0.exe', '新增 AI �
 当前为规则引擎（`app/services/ai_service.py`）：成本 + 目标利润率 + 竞品参考 + 历史销量趋势。
 后续接入真实 AI 模型时，**仅需替换 `ai_service.py` 内部实现**，保持输入输出契约不变。
 
+## AI 资料导入 Agent（LangGraph + PostgreSQL 检查点）
+
+把管理员放进 `assets/` 的 Word / Excel / CSV / Markdown 资料整理成规范化候选数据并入库。
+**模型没有写库权限**：它只能产出结构化候选，落库必须通过服务端硬校验门禁。
+
+### 执行链路（`app/agent/`）
+
+```
+inventory_node   扫描 assets 清单（sha256 / 类型白名单）
+   ↓
+profiler_node    来源定位：真实模型走**有界工具循环**（ReAct），规则引擎兜底
+   ↓
+extract_products / extract_packages / extract_bindings   三路并行单次结构化抽取
+   ↓
+reconcile_node   引用归一化（SKU 精确/包含/型号码/模糊匹配），歧义即丢弃并记录
+   ↓
+validate_node    服务端硬校验（Pydantic 白名单 + 引用完整性 + 类别/绑定/套餐约束）
+   ↓ 失败
+correction_node  带**精确错误**回到模型自愈，最多 3 次，且不得凭空新增商品/套餐
+   ↓ 通过 / 超限失败
+apply_node       单事务入库（按候选集取数 + 行锁），report_node 出报告
+```
+
+### 几个关键设计
+
+- **工具循环是真实的多轮**：`profiler_node` 把 `list_assets / read_excel / read_word /
+  search_text / lookup_existing / report_issue` 交给模型自主选择，Observation 回灌后再决策，
+  由 `submit_sources_plan` 终止；模型提交的来源会逐条过服务端校验（文件必须来自清单、
+  工作表必须真实存在）。步数受 `max_steps` 硬限制，超限自动回退到规则定位。
+- **模型供应商无关的 schema**：所有发给模型的 function parameters 都经
+  `app/agent/schema_utils.py` 内联 `$ref`，不残留 `$defs`（否则 strict 服务端会返回
+  `Pointer '/$defs/...' does not exist`）。
+- **离线可跑**：`LLM_PROVIDER=mock` 时全程走确定性规则 + 离线 Mock，不需要任何外部接口。
+- **可中断**：`POST /api/agent/runs/{id}/resume` 基于 PostgresSaver 检查点续跑，
+  进程异常中断后不必从头再来。
+- **可计量**：每次模型调用的 token / 耗时 / 成本写入 `llm_calls` 表，
+  `GET /api/agent/runs/{id}` 的 `llm` 字段与工作台运行详情都会展示。
+
+### 评测（不是"感觉还行"）
+
+```bash
+cd Workbench
+# 流水线一致性：19 个 golden case，离线可跑（CI 门禁）
+.venv/bin/python -m eval.run_eval --provider scripted --enforce
+
+# 真实模型抽取质量：同一份数据集换成真实模型，输出准确率与成本
+.venv/bin/python -m eval.run_eval --provider live --out eval/report-live.json
+```
+
+指标：products/packages/bindings 微平均 P/R/F1、商品与套餐字段级准确率、幻觉率
+（凭空造出的商品占比）、case 通过率、自愈触发次数、LLM 调用次数/tokens/成本。
+数据集定义在 `eval/golden_cases.py`，覆盖 Excel（含标题行偏移、文本价格口径、50 条批量）、
+Word、CSV、Markdown、纯文本、多文件混合，以及引用歧义、套餐无依据、重复 SKU、
+模型多返回字段、自愈不得造数据等护栏路径。
+
+### API
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/agent/runs` | 启动运行（`mode=dry-run/apply`） |
+| GET | `/api/agent/runs/{id}` | 运行详情（含 `llm` 计量与 `events` 轨迹） |
+| POST | `/api/agent/runs/{id}/resume` | 从检查点续跑 |
+| POST | `/api/agent/runs/{id}/cancel` | 取消运行 |
+| POST | `/api/agent/runs/{id}/apply` | 人工复核后入库候选 |
+| GET/PUT | `/api/agent/config` | 模型接口配置（API Key 不下发原文） |
+
 ## 数据库迁移（Alembic）
 
 仅用于管理新增表 / 未来字段，**不要**在迁移中修改现有表。

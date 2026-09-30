@@ -1,8 +1,9 @@
 """LangGraph 状态图运行状态机、后台执行与报告。"""
 import json
+import logging
 import threading
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.agent import persistence, validation
@@ -10,6 +11,7 @@ from app.agent.graph.builder import build_import_graph
 from app.agent.graph.config import get_checkpointer
 from app.agent.graph.runtime import AgentCancelled, GraphRuntime
 from app.agent.llm_client import OpenAICompatibleClient
+from app.agent.metrics import record_llm_call, summarize_run_llm
 from app.agent.mock_provider import MockProvider
 from app.core.config import settings
 from app.db.base import SessionLocal, now_str
@@ -19,6 +21,8 @@ from app.models.import_run_event import ImportRunEvent
 from app.models.package import Package
 from app.models.product import Product
 from app.services.agent_config_service import get_agent_ai
+
+logger = logging.getLogger(__name__)
 
 
 _lock = threading.Lock()
@@ -65,13 +69,13 @@ def is_cancelled(run_id: int) -> bool:
         return bool(event and event.is_set())
 
 
-def start_background(run_id: int) -> None:
+def start_background(run_id: int, resume: bool = False) -> None:
     if not try_claim_run(run_id):
         raise RuntimeError("已有 Agent 任务正在运行")
 
     def runner():
         try:
-            execute_run(run_id)
+            execute_run(run_id, resume=resume)
         finally:
             release_run(run_id)
 
@@ -119,6 +123,12 @@ def _provider(ai_config: dict) -> tuple[object, str]:
             "openai",
         )
     if ai_config.get("base_url") and ai_config.get("model"):
+        # provider=auto 且配置了地址+模型 ⇒ 走真实（可能计费）接口，显式告警避免误用
+        logger.warning(
+            "Agent provider=auto 命中真实 LLM 接口：base_url=%s model=%s（将产生真实调用与费用）",
+            ai_config.get("base_url"),
+            ai_config.get("model"),
+        )
         return OpenAICompatibleClient(
             base_url=ai_config["base_url"],
             api_key=ai_config["api_key"],
@@ -127,16 +137,43 @@ def _provider(ai_config: dict) -> tuple[object, str]:
     return MockProvider(), "mock"
 
 
+def _llm_observer(run_id: int):
+    """把每次模型调用的 token/耗时落到 llm_calls；计量失败不影响主流程。"""
+
+    def observe(payload: dict) -> None:
+        try:
+            with SessionLocal() as metrics_db:
+                record_llm_call(
+                    metrics_db,
+                    run_id=run_id,
+                    node=str(payload.get("node") or ""),
+                    provider=str(payload.get("provider") or ""),
+                    model=str(payload.get("model") or ""),
+                    prompt_version=settings.agent_prompt_version,
+                    usage=payload.get("usage"),
+                    latency_ms=int(payload.get("latency_ms") or 0),
+                )
+        except Exception:  # pragma: no cover - 计量属于旁路
+            logger.exception("LLM 计量写入失败（已忽略）")
+
+    return observe
+
+
 def _db_stats(db: Session) -> dict:
-    products = db.scalars(select(Product)).all()
-    packages = db.scalars(select(Package)).all()
-    bindings = db.scalars(select(DeviceBinding)).all()
+    """库内规模统计：用 COUNT 聚合，避免把整表读进内存。"""
+    total = db.scalar(select(func.count()).select_from(Product)) or 0
+    devices = (
+        db.scalar(
+            select(func.count()).select_from(Product).where(Product.category == "device")
+        )
+        or 0
+    )
     return {
-        "products": len(products),
-        "devices": sum(1 for p in products if p.category == "device"),
-        "consumables": sum(1 for p in products if p.category == "consumable"),
-        "packages": len(packages),
-        "bindings": len(bindings),
+        "products": int(total),
+        "devices": int(devices),
+        "consumables": int(total) - int(devices),
+        "packages": int(db.scalar(select(func.count()).select_from(Package)) or 0),
+        "bindings": int(db.scalar(select(func.count()).select_from(DeviceBinding)) or 0),
     }
 
 
@@ -230,25 +267,38 @@ def _node_summary(node_name: str, state: dict) -> str:
     return node_name
 
 
-def execute_run(run_id: int) -> None:
+def execute_run(run_id: int, resume: bool = False) -> None:
     db = SessionLocal()
     try:
         run = _load_run(db, run_id)
         run.status = "running"
         run.stage = "inventory"
-        run.started_at = now_str()
+        if not resume or not run.started_at:
+            run.started_at = now_str()
+        run.error = None
         ai_config = get_agent_ai(db)
         provider_client, provider_name = _provider(ai_config)
         run.provider = provider_name
         run.prompt_version = settings.agent_prompt_version
         db.commit()
-        _append_event(db, run_id, 0, "system", None, "任务启动，开始扫描 assets 目录")
+        _append_event(
+            db,
+            run_id,
+            0,
+            "system",
+            None,
+            "任务续跑：从检查点恢复" if resume else "任务启动，开始扫描 assets 目录",
+        )
 
         runtime = GraphRuntime(
             provider=provider_client,
             provider_name=provider_name,
             db=db,
             cancel_check=lambda: is_cancelled(run_id),
+            max_steps=int(ai_config.get("max_steps") or settings.llm_max_steps),
+            # 离线 Mock 走确定性规则定位；真实模型才启用工具循环
+            enable_tool_loop=provider_name != "mock",
+            llm_observer=_llm_observer(run_id),
         )
         initial_state = {
             "run_id": run_id,
@@ -272,8 +322,23 @@ def execute_run(run_id: int) -> None:
         config = {"configurable": {"thread_id": str(run_id)}}
         with get_checkpointer() as checkpointer:
             graph = build_import_graph(runtime, checkpointer)
+            if resume:
+                snapshot = graph.get_state(config)
+                if not snapshot.values:
+                    raise RuntimeError("该运行没有可续跑的检查点")
+                if not snapshot.next:
+                    raise RuntimeError("该运行的图已执行结束，没有待续跑节点")
+                final_state = dict(snapshot.values)
+                _append_event(
+                    db,
+                    run_id,
+                    step,
+                    "system",
+                    None,
+                    f"从检查点续跑，待执行节点：{'、'.join(snapshot.next)}",
+                )
             for chunk in graph.stream(
-                initial_state,
+                None if resume else initial_state,
                 config=config,
                 stream_mode="updates",
             ):
@@ -310,6 +375,17 @@ def execute_run(run_id: int) -> None:
                             )
                         )
                         db.commit()
+                    for trace_item in update.get("react_trace") or []:
+                        if not isinstance(trace_item, dict):
+                            continue
+                        _append_event(
+                            db,
+                            run_id,
+                            step,
+                            str(trace_item.get("role") or "system"),
+                            trace_item.get("tool"),
+                            str(trace_item.get("summary") or ""),
+                        )
                     _append_event(
                         db,
                         run_id,
@@ -332,7 +408,10 @@ def execute_run(run_id: int) -> None:
                 else "Agent 任务失败"
             )[:2000]
             run.report_json = json.dumps(
-                final_state.get("report") or {},
+                {
+                    **(final_state.get("report") or {}),
+                    "llm": summarize_run_llm(db, run_id),
+                },
                 ensure_ascii=False,
                 default=str,
             )
@@ -354,6 +433,7 @@ def execute_run(run_id: int) -> None:
             "issues": latest_candidates.get("issues", []),
         }
         report["prompt_version"] = settings.agent_prompt_version
+        report["llm"] = summarize_run_llm(db, run_id)
         candidates_json = json.dumps(
             {
                 "products": latest_candidates["products"],
@@ -439,6 +519,7 @@ def run_to_dict(db: Session, run: ImportRun) -> dict:
         "started_at": run.started_at,
         "finished_at": run.finished_at,
         "error": run.error,
+        "llm": summarize_run_llm(db, run.id),
         "report": json.loads(run.report_json) if run.report_json else None,
         "candidates": json.loads(run.candidates_json) if run.candidates_json else None,
         "events": [

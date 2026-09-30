@@ -3,12 +3,16 @@ node_modules/
 .venv/
 __pycache__/
 *.pyc
+# 工作区内的 npm 缓存（当 ~/.npm 权限异常时用 --cache 指向这里）
+.npm-cache/
 
 # Builds & Outputs
 dist/
 release/
 *.exe
 *.zip
+# Agent 评测产物（本地指标报告，不入库）
+Workbench/eval/report-*.json
 
 # Database & Runtime Data
 quotesys_pgdata/

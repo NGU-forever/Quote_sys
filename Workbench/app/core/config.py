@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     llm_model: str = ""
     llm_max_steps: int = 20
 
+    # LLM 计量：按百万 token 单价折算成本（默认 0 = 只统计 token 不计价）
+    llm_input_price_per_1m: float = 0.0
+    llm_output_price_per_1m: float = 0.0
+    llm_price_currency: str = "CNY"
+
     # 工作台静态构建目录（dev 指向 web/dist，相对进程 cwd=Workbench/；打包时设为解包后的目录）
     workbench_dir: str = "web/dist"
 

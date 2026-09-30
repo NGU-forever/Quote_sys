@@ -94,6 +94,9 @@ export const api = {
   agentGetRun: (runId) => request(`/agent/runs/${runId}`),
   agentCancelRun: (runId) =>
     request(`/agent/runs/${runId}/cancel`, { method: 'POST' }),
+  // 从检查点续跑（进程异常中断后不必从头再来）
+  agentResumeRun: (runId) =>
+    request(`/agent/runs/${runId}/resume`, { method: 'POST' }),
   agentApplyRun: (runId, candidates = null) =>
     request(`/agent/runs/${runId}/apply`, {
       method: 'POST',

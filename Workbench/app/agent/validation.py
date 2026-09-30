@@ -33,14 +33,19 @@ def validate_candidates(payload: dict, db: Session) -> tuple[dict, list[str], li
         errors.append("未收到任何可导入的候选记录")
 
     # 产品：SKU 不能重复；不能把已有商品改成另一类别
+    # 只取三列而非整个 ORM 实体：现有 SKU 全集是引用解析的语义前提，但不需要把整表对象读进内存
     seen_skus: dict[str, str] = {}
     existing = {
         row.sku_id: {"category": row.category, "name": row.name}
-        for row in db.scalars(select(Product)).all()
+        for row in db.execute(
+            select(Product.sku_id, Product.category, Product.name)
+        ).all()
     }
     existing_bindings = {
-        (b.device_sku_id, b.consumable_sku_id)
-        for b in db.scalars(select(DeviceBinding)).all()
+        (row.device_sku_id, row.consumable_sku_id)
+        for row in db.execute(
+            select(DeviceBinding.device_sku_id, DeviceBinding.consumable_sku_id)
+        ).all()
     }
     for p in parsed.products:
         if p.sku_id in seen_skus:

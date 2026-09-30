@@ -9,6 +9,7 @@ from app.agent import persistence, validation
 from app.agent.graph.runtime import GraphRuntime
 from app.agent.graph.state import AgentGraphState
 from app.agent.schemas import CandidateSet
+from app.agent.schema_utils import function_tool_schema
 from app.models.product import Product
 
 
@@ -91,7 +92,10 @@ def reconcile_node(state: AgentGraphState, runtime: GraphRuntime) -> dict:
     raw_bindings = list(state.get("bindings_extracted") or [])
     existing_products = []
     if runtime.db is not None:
-        existing_products = list(runtime.db.scalars(select(Product)).all())
+        # 只取 sku_id / name 两列：别名解析需要全量 SKU，但无需实体对象
+        existing_products = list(
+            runtime.db.execute(select(Product.sku_id, Product.name)).all()
+        )
     known, aliases = _alias_targets(products, existing_products)
 
     issues: list[str] = []
@@ -183,16 +187,12 @@ def should_continue_correction(state: AgentGraphState) -> str:
 
 
 def _candidate_tool_schema() -> dict:
-    schema = CandidateSet.model_json_schema()
-    schema.pop("$defs", None)
-    return {
-        "type": "function",
-        "function": {
-            "name": "correct_candidates",
-            "description": "仅修复给定错误，不新增无资料依据的套餐或 SKU。",
-            "parameters": schema,
-        },
-    }
+    """修复工具的 parameters：内联 $ref，避免 strict 服务端因悬空引用返回 400。"""
+    return function_tool_schema(
+        "correct_candidates",
+        "仅修复给定错误，不新增无资料依据的套餐或 SKU。",
+        CandidateSet.model_json_schema(),
+    )
 
 
 def correction_node(state: AgentGraphState, runtime: GraphRuntime) -> dict:
@@ -247,8 +247,12 @@ def correction_node(state: AgentGraphState, runtime: GraphRuntime) -> dict:
         "issues": list(corrected.get("issues") or []),
     }
     issues = [str(issue) for issue in corrected["issues"] if str(issue).strip()]
-    package_sources = (state.get("sources_plan") or {}).get("packages") or []
-    if not package_sources and corrected["packages"]:
+    # 证据约束：自愈只能修复或删减，不能凭空新增没有资料依据的商品/套餐
+    plan = state.get("sources_plan") or {}
+    if not (plan.get("products") or []) and corrected["products"]:
+        corrected["products"] = []
+        issues.append("资料中没有商品依据，已拒绝自愈节点新增商品")
+    if not (plan.get("packages") or []) and corrected["packages"]:
         corrected["packages"] = []
         issues.append("资料中没有套餐依据，已拒绝自愈节点新增套餐")
     corrected["issues"] = list(
