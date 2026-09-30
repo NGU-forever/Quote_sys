@@ -13,16 +13,18 @@ class Settings(BaseSettings):
     """应用设置。字段名小写，环境变量名不区分大小写（DATABASE_URL → database_url）。"""
 
     # 应用
-    app_name: str = "HHZ 超声医疗报价平台 API"
+    app_name: str = "quote-service"
     app_version: str = "2.0.0"
     debug: bool = False
 
-    # 数据库（SQLAlchemy 双引擎）
-    # 默认指向 backend 目录下的本地 SQLite；开发常用库放 backend/data（sqlite:///./data/app.db）
+    # 数据库（SQLAlchemy 双引擎：默认 SQLite，配置 PostgreSQL 连接串即可平滑切换）
     database_url: str = "sqlite:///./app.db"
 
-    # 鉴权（暂未强制启用，但结构已预留 JWT，便于后续接入）
-    auth_secret: str = "hhz-workbench-local-secret"
+    # Redis 缓存与分布式自增
+    redis_url: str = "redis://localhost:6379/0"
+
+    # 鉴权（预留 JWT 密钥）
+    auth_secret: str = "quotesys-auth-secret-key"
     token_ttl_seconds: int = 12 * 60 * 60  # 12 小时
     jwt_algorithm: str = "HS256"
 
@@ -30,7 +32,7 @@ class Settings(BaseSettings):
     upload_dir: str = "./uploads"
     max_upload_bytes: int = 5 * 1024 * 1024  # 5MB
 
-    # 数据生成 Agent：源资料目录（开发默认仓库根 assets，打包后由 entry.py 注入 %APPDATA%\\HHZ\\assets）
+    # 数据生成 Agent：源资料目录（开发默认仓库根 assets，打包后由 entry.py 注入 %APPDATA%\\QuoteSys\\assets）
     assets_dir: str = "../assets"
     agent_default_mode: str = "apply"
     agent_prompt_version: str = "2026-09-12.1"
