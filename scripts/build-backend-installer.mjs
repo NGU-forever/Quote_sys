@@ -1,6 +1,6 @@
 // scripts/build-backend-installer.mjs
-// 用 NSIS 把 release/HHZDataService.exe 包成安装器
-//   release/HHZDataService Setup <版本>.exe
+// 用 NSIS 把 release/QuoteService.exe 包成安装器
+//   release/QuoteSys-Service-Setup.exe
 // 安装器会在安装时自动放行 Windows 防火墙 TCP 8000（专用网络），无需关闭防火墙。
 //
 // 用法：
@@ -19,7 +19,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const srcExe = path.join(repoRoot, 'release', 'HHZDataService.exe')
+const srcExe = path.join(repoRoot, 'release', 'QuoteService.exe')
 
 function fail(msg) {
   console.error(`\n[backend-installer] ${msg}`)
@@ -37,7 +37,7 @@ for (const rel of ['package.json', path.join('Quote', 'package.json')]) {
   } catch {}
 }
 const version = process.env.APP_VERSION || pkgVersion || '2.0.0'
-const setupFile = path.join(repoRoot, 'release', `HHZDataService Setup ${version}.exe`)
+const setupFile = path.join(repoRoot, 'release', 'QuoteSys-Service-Setup.exe')
 
 // ---------- 前置：源 exe 必须已构建 ----------
 if (!existsSync(srcExe)) {
@@ -133,7 +133,7 @@ function resolveMakensis() {
 const makensis = resolveMakensis()
 if (!makensis) {
   console.warn(
-    '\n[backend-installer] 未找到可用的 makensis（NSIS 编译器），跳过安装器生成（release 中仍有绿色版 HHZDataService.exe）。\n' +
+    '\n[backend-installer] 未找到可用的 makensis（NSIS 编译器），跳过安装器生成（release 中仍有绿色版 QuoteService.exe）。\n' +
       '  生成安装器请任选其一：\n' +
       '  1) Windows 安装 NSIS 后重跑：winget install NSIS.NSIS\n' +
       '  2) 本机 electron-builder 缓存（.electron-cache/nsis 或系统缓存目录）中已有 NSIS 时会自动使用\n' +

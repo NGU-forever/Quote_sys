@@ -13,13 +13,34 @@ import unittest
 from pathlib import Path
 
 _repo_root = Path(__file__).resolve().parents[2]
-_tmp_dir = Path(tempfile.mkdtemp(prefix="hhz-agent-tests-"))
+_tmp_dir = Path(tempfile.mkdtemp(prefix="quotesys-agent-tests-"))
 _tmp_db = _tmp_dir / "app.db"
-shutil.copy2(_repo_root / "Workbench/data/app.db", _tmp_db)
+_tmp_assets = _tmp_dir / "assets"
+_tmp_assets.mkdir(parents=True, exist_ok=True)
+
 os.environ["DATABASE_URL"] = f"sqlite:///{_tmp_db}"
-os.environ["ASSETS_DIR"] = str(_repo_root / "assets")
+os.environ["ASSETS_DIR"] = str(_tmp_assets)
 os.environ["LLM_PROVIDER"] = "mock"
 os.environ["AGENT_DEFAULT_MODE"] = "apply"
+
+import openpyxl  # noqa: E402
+from app.agent.mock_provider import DEMO_PRODUCTS, DEMO_PACKAGES, DEMO_CANDIDATES  # noqa: E402
+
+wb = openpyxl.Workbook()
+ws1 = wb.active
+ws1.title = "SKU主表"
+ws1.append(["sku_id", "产品名称", "最低价", "单位", "适用设备", "包装规格", "备注"])
+for p in DEMO_PRODUCTS:
+    ws1.append([p["sku_id"], p["name"], p["min_price"], p["unit"], p.get("applicable_devices") or "", "", p.get("raw_price_desc") or ""])
+
+ws2 = wb.create_sheet("套餐定义表")
+ws2.append(["套餐编号", "套餐名称", "商品组合", "套餐售价", "备注"])
+for pkg in DEMO_PACKAGES:
+    ws2.append([pkg["package_id"], pkg["name"], ",".join(pkg["sku_ids"]), pkg["std_price"], pkg.get("note") or ""])
+
+wb.save(_tmp_assets / "产品最低价格.xlsx")
+(_tmp_assets / "notes.md").write_text("# 说明\n", encoding="utf-8")
+(_tmp_assets / "unsupported_notes.bin").write_bytes(b"binary content")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -28,10 +49,22 @@ from app.agent.readers.excel_reader import read_excel  # noqa: E402
 from app.agent.readers.manifest import build_manifest  # noqa: E402
 from app.agent.validation import validate_candidates  # noqa: E402
 from app.agent import agent_service  # noqa: E402
+from app.agent.persistence import apply_candidates  # noqa: E402
 from app.db.base import Base, SessionLocal, engine  # noqa: E402
+from app.db.seed import seed_reserved_admin, seed_app_settings  # noqa: E402
 from app.main import app  # noqa: E402
 
 Base.metadata.create_all(bind=engine)
+with SessionLocal() as db:
+    seed_reserved_admin(db)
+    seed_app_settings(db)
+    import copy
+    init_candidates = copy.deepcopy(DEMO_CANDIDATES)
+    for p in init_candidates["products"]:
+        if p["sku_id"] == "P013":
+            p["max_price"] = None
+            p["raw_price_desc"] = "≥6000"
+    apply_candidates(db, init_candidates, mode="apply")
 
 
 def _cleanup():
@@ -115,7 +148,7 @@ class AgentManifestAndValidationTests(unittest.TestCase):
             target_file.unlink(missing_ok=True)
 
     def test_excel_reader_and_path_sandbox(self):
-        summary = read_excel(_repo_root / "assets/产品最低价格.xlsx", sheet="SKU主表", max_rows=3)
+        summary = read_excel(Path(os.environ["ASSETS_DIR"]) / "产品最低价格.xlsx", sheet="SKU主表", max_rows=3)
         self.assertEqual(summary["headers"][0], "sku_id")
         self.assertEqual(summary["row_count"], 25)
         self.assertGreater(summary["truncated"], False)

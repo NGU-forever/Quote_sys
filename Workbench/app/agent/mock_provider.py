@@ -6,12 +6,19 @@ from app.agent.llm_client import LLMResponse, ToolCall
 
 
 def _device(sku: str, name: str, min_price, raw: str, applicable: str | None = None) -> dict:
+    max_p = None
+    if "-" in raw:
+        try:
+            parts = raw.split("-")
+            max_p = float(parts[1]) if "." in parts[1] else int(parts[1])
+        except Exception:
+            pass
     return {
         "sku_id": sku,
         "category": "device",
         "name": name,
         "min_price": min_price,
-        "max_price": None,
+        "max_price": max_p,
         "unit": "台",
         "pieces_per_unit": None,
         "units_per_box": None,

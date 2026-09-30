@@ -1,15 +1,15 @@
-; HHZDataService - master device data service installer (NSIS / Unicode)
+; QuoteService - master device data service installer (NSIS / Unicode)
 ;
 ; Features:
-;   1. Install HHZDataService.exe to the selected directory;
+;   1. Install QuoteService.exe to the selected directory;
 ;   2. Automatically allow Windows firewall: TCP 8000 inbound (private+public profile);
 ;   3. Create Start Menu / Desktop shortcuts and register uninstall entry;
 ;   4. On uninstall, remove firewall rule, shortcuts and install directory.
 ;
 ; Build params (all overridable via command line /D):
 ;   APP_VERSION   version, used in names and uninstall registry (default 2.0.0)
-;   SRC_EXE       source exe path (default ..\release\HHZDataService.exe)
-;   SETUP_FILE    installer output path (default ..\release\HHZDataService Setup <version>.exe)
+;   SRC_EXE       source exe path (default ..\release\QuoteService.exe)
+;   SETUP_FILE    installer output path (default ..\release\QuoteSys-Service-Setup.exe)
 ;
 ; Normal build: node scripts/build-backend-installer.mjs (auto-locates makensis and version).
 Unicode true
@@ -22,15 +22,15 @@ Unicode true
   !define APP_VERSION "2.0.0"
 !endif
 !ifndef SRC_EXE
-  !define SRC_EXE "..\release\HHZDataService.exe"
+  !define SRC_EXE "..\release\QuoteService.exe"
 !endif
 !ifndef SETUP_FILE
-  !define SETUP_FILE "..\release\HHZDataService Setup ${APP_VERSION}.exe"
+  !define SETUP_FILE "..\release\QuoteSys-Service-Setup.exe"
 !endif
 
-!define PRODUCT_NAME "HHZDataService"
-!define PRODUCT_EXE "HHZDataService.exe"
-!define FIREWALL_RULE "HHZ Data Service (8000)"
+!define PRODUCT_NAME "QuoteService"
+!define PRODUCT_EXE "QuoteService.exe"
+!define FIREWALL_RULE "QuoteSys Data Service (8000)"
 !define FIREWALL_PORT "8000"
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 !define AUTOSTART_KEY "Software\Microsoft\Windows\CurrentVersion\Run"
@@ -49,7 +49,7 @@ InstallDirRegKey HKLM "${UNINSTALL_KEY}" "InstallLocation"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${PRODUCT_EXE}"
-!define MUI_FINISHPAGE_RUN_TEXT "启动 HHZDataService (托盘后台服务)"
+!define MUI_FINISHPAGE_RUN_TEXT "启动 QuoteService (托盘后台服务)"
 !insertmacro MUI_PAGE_FINISH
 
 !insertmacro MUI_LANGUAGE "SimpChinese"
@@ -58,7 +58,7 @@ InstallDirRegKey HKLM "${UNINSTALL_KEY}" "InstallLocation"
 ; ---------------- Init: 64-bit only, switch to 64-bit registry view ----------------
 Function .onInit
   ${IfNot} ${RunningX64}
-    MessageBox MB_ICONSTOP|MB_OK "HHZDataService requires 64-bit Windows. Setup aborted."
+    MessageBox MB_ICONSTOP|MB_OK "QuoteService requires 64-bit Windows. Setup aborted."
     Abort
   ${EndIf}
   SetRegView 64
@@ -88,7 +88,7 @@ Section "Main program (with firewall rule TCP 8000)" SecMain
   ; Uninstall registry entries
   WriteRegStr HKLM "${UNINSTALL_KEY}" "DisplayName" "${PRODUCT_NAME}"
   WriteRegStr HKLM "${UNINSTALL_KEY}" "DisplayVersion" "${APP_VERSION}"
-  WriteRegStr HKLM "${UNINSTALL_KEY}" "Publisher" "HHZ"
+  WriteRegStr HKLM "${UNINSTALL_KEY}" "Publisher" "QuoteSys"
   WriteRegStr HKLM "${UNINSTALL_KEY}" "DisplayIcon" "$INSTDIR\${PRODUCT_EXE}"
   WriteRegStr HKLM "${UNINSTALL_KEY}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKLM "${UNINSTALL_KEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'

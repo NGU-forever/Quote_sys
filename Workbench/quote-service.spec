@@ -3,7 +3,7 @@
 #
 # 用法（在 Windows 上）：
 #   1. 构建工作台前端：cd web && npm run build   （产出 Workbench/web/dist/workbench.html + assets）
-#   2. 打包：          cd Workbench && pyinstaller hhz-data-service.spec --clean --noconfirm
+#   2. 打包：          cd Workbench && pyinstaller quote-service.spec --clean --noconfirm
 import atexit
 import os
 import shutil
@@ -27,7 +27,7 @@ _seed_tmp = None
 def sanitize_seed_db(source: Path) -> Path:
     """复制并清理种子库：不把 AI API Key / Agent 运行历史打进 exe。"""
     global _seed_tmp
-    _seed_tmp = Path(tempfile.mkdtemp(prefix="hhz-seed-"))
+    _seed_tmp = Path(tempfile.mkdtemp(prefix="quotesys-seed-"))
     target = _seed_tmp / source.name
     shutil.copy2(source, target)
     con = sqlite3.connect(str(target))
@@ -60,7 +60,7 @@ if (workbench_build / "workbench.html").exists():
         datas.append((str(workbench_build / "assets"), os.path.join(workbench_dest, "assets")))
 
 # 可选的初始数据：把当前本地库（Workbench/data/app.db）和 uploads 里的图片
-# 一并打进 exe。HHZDataService 首次启动且 %APPDATA%\HHZ\app.db 不存在时复制，
+# 一并打进 exe。QuoteService 首次启动且 %APPDATA%\QuoteSys\app.db 不存在时复制，
 # 已有数据不会被覆盖。
 seed_db = backend_dir / "data" / "app.db"
 seed_uploads = backend_dir / "uploads"
@@ -128,7 +128,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name="HHZDataService",
+    name="QuoteService",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -140,5 +140,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,  # 可选：icons/hhz.ico
+    icon=None,
 )

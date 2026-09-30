@@ -270,29 +270,42 @@ class QualityNodeTests(unittest.TestCase):
         self.assertTrue(any("套餐" in issue for issue in result["issues"]))
 
     def test_compiled_graph_completes_baseline_with_checkpoint(self):
-        root = Path(__file__).resolve().parents[2] / "assets"
-        db = _db_session()
-        runtime = GraphRuntime(
-            provider=MockProvider(),
-            provider_name="mock",
-            db=db,
-            cancel_check=lambda: False,
-        )
-        graph = build_import_graph(runtime, InMemorySaver())
-        config = {"configurable": {"thread_id": "quality-e2e"}}
-        initial = _initial_state()
-        try:
-            with patch.object(settings, "assets_dir", str(root)):
-                result = graph.invoke(initial, config=config)
-            snapshot = graph.get_state(config)
-        finally:
-            _close_db(db)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            import openpyxl
 
-        self.assertEqual(result["status"], "succeeded")
-        self.assertEqual(len(result["candidates"]["products"]), 25)
-        self.assertEqual(len(result["candidates"]["packages"]), 3)
-        self.assertEqual(len(result["candidates"]["bindings"]), 41)
-        self.assertEqual(snapshot.values["status"], "succeeded")
+            wb = openpyxl.Workbook()
+            ws1 = wb.active
+            ws1.title = "SKU主表"
+            ws1.append(["sku_id", "产品名称", "最低价", "单位", "适用设备", "包装规格", "备注"])
+            ws1.append(["P001", "超声波治疗仪CSY-200（台式）", 2500, "台", "", "", ""])
+            ws2 = wb.create_sheet("套餐定义表")
+            ws2.append(["套餐编号", "套餐名称", "商品组合", "套餐售价", "备注"])
+            ws2.append(["PKG001", "超声治疗（台式）推广套餐", "P001*1", 6000, "促销买赠套餐"])
+            wb.save(root / "产品最低价格.xlsx")
+
+            db = _db_session()
+            runtime = GraphRuntime(
+                provider=MockProvider(),
+                provider_name="mock",
+                db=db,
+                cancel_check=lambda: False,
+            )
+            graph = build_import_graph(runtime, InMemorySaver())
+            config = {"configurable": {"thread_id": "quality-e2e"}}
+            initial = _initial_state()
+            try:
+                with patch.object(settings, "assets_dir", str(root)):
+                    result = graph.invoke(initial, config=config)
+                snapshot = graph.get_state(config)
+            finally:
+                _close_db(db)
+
+            self.assertEqual(result["status"], "succeeded")
+            self.assertEqual(len(result["candidates"]["products"]), 25)
+            self.assertEqual(len(result["candidates"]["packages"]), 3)
+            self.assertEqual(len(result["candidates"]["bindings"]), 41)
+            self.assertEqual(snapshot.values["status"], "succeeded")
 
     def test_compiled_graph_stops_after_three_failed_corrections(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,5 +1,5 @@
 // scripts/build-backend-exe.mjs
-// 构建后端「HHZDataService.exe」（Windows 托盘后台服务），跨平台一键执行：
+// 构建后端「QuoteService.exe」（Windows 托盘后台服务），跨平台一键执行：
 //
 //   Windows（原生，推荐）:
 //     本脚本直接委托 scripts\build-backend.bat（前端构建 → 安装依赖 → pyinstaller → 复制到 release\）。
@@ -8,8 +8,8 @@
 //     1. 确保已构建前端 dist/workbench.html（缺失时自动执行 npm run build）；
 //     2. 启动 batonogov/pyinstaller-windows（Ubuntu + Wine + Windows Python 3.13 + PyInstaller 6.x）,
 //        把仓库挂载到容器 /src，容器内自动 `pip install -r Workbench/requirements.txt` 并
-//        `pyinstaller Workbench/hhz-data-service.spec`；
-//     3. 把产物复制到 release/HHZDataService.exe 并清理临时 dist。
+//        `pyinstaller Workbench/quote-service.spec`；
+//     3. 把产物复制到 release/QuoteService.exe 并清理临时 dist。
 //
 // 依赖：Node 18+；macOS/Linux 额外需要 Docker（首次自动拉取 ~1.5GB 镜像）。
 //
@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const isWin = process.platform === 'win32'
-const exeName = 'HHZDataService.exe'
+const exeName = 'QuoteService.exe'
 const seedDb = path.join(repoRoot, 'Workbench', 'data', 'app.db')
 const IMAGE = 'batonogov/pyinstaller-windows:latest'
 

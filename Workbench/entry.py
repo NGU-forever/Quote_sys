@@ -1,7 +1,7 @@
-"""HHZ 数据服务 — Windows 托盘后台服务入口。
+"""QuoteSys 数据服务 — Windows 托盘后台服务入口。
 
 职责：
-1. 确定数据目录 %APPDATA%\\HHZ（app.db + uploads）；
+1. 确定数据目录 %APPDATA%\\QuoteSys（app.db + uploads）；
 2. 后台线程起 uvicorn 0.0.0.0:8000（局域网可达）；
 3. 托盘菜单：打开工作台 / 打开数据目录 / 开机自启(开关) / 退出；
 4. 首次运行自动用默认浏览器打开工作台（等待服务就绪后再打开）；
@@ -9,7 +9,7 @@
 
 打包（在 Windows 上）：
     先构建工作台前端：`cd web && npm run build`（产出 web/dist/workbench.html + web/dist/assets）
-    再打包：     `cd backend && pyinstaller hhz-data-service.spec --clean --noconfirm`
+    再打包：     `cd Workbench && pyinstaller quote-service.spec --clean --noconfirm`
 """
 import os
 import shutil
@@ -22,7 +22,7 @@ from pathlib import Path
 
 HOST = "0.0.0.0"
 PORT = 8000
-AUTOSTART_NAME = "HHZDataService"
+AUTOSTART_NAME = "QuoteService"
 
 
 def resource_dir() -> Path:
@@ -33,7 +33,7 @@ def resource_dir() -> Path:
 
 def data_dir() -> Path:
     root = os.environ.get("APPDATA") or str(Path.home())
-    d = Path(root) / "HHZ"
+    d = Path(root) / "QuoteSys"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -168,7 +168,7 @@ def acquire_single_instance_lock():
         import ctypes
 
         kernel32 = ctypes.windll.kernel32
-        mutex_name = "Global\\HHZDataService_SingleInstance_Mutex"
+        mutex_name = "Global\\QuoteService_SingleInstance_Mutex"
         mutex = kernel32.CreateMutexW(None, False, mutex_name)
         last_error = kernel32.GetLastError()
         ERROR_ALREADY_EXISTS = 183
@@ -201,7 +201,7 @@ def main() -> None:
         img = Image.new("RGB", (64, 64), (30, 136, 229))
         draw = ImageDraw.Draw(img)
         draw.rounded_rectangle([6, 6, 58, 58], radius=14, fill=(13, 71, 161))
-        draw.text((22, 20), "H", fill=(255, 255, 255))
+        draw.text((22, 20), "Q", fill=(255, 255, 255))
         return img
 
     menu = pystray.Menu(
@@ -219,7 +219,7 @@ def main() -> None:
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("退出", lambda icon, item: icon.stop()),
     )
-    icon = pystray.Icon("hhz-data-service", icon_image(), "HHZ 数据服务", menu=menu)
+    icon = pystray.Icon("quote-service", icon_image(), "QuoteSys 数据服务", menu=menu)
 
     if first_run:
         # 等待服务就绪再打开浏览器，避免出现"无法访问此网站"（首次解包/建库较慢）

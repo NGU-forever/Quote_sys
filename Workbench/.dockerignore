@@ -9,3 +9,8 @@ uploads/
 .gitignore
 .venv/
 venv/
+tests/
+.pytest_cache/
+web/node_modules/
+dist/
+release/

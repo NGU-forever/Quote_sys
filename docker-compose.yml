@@ -1,0 +1,71 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: quotesys-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: quotesys_db
+      POSTGRES_USER: quotesys_user
+      POSTGRES_PASSWORD: quotesys_secret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quotesys_user -d quotesys_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: quotesys-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./Workbench
+      dockerfile: Dockerfile
+    container_name: quotesys-backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://quotesys_user:quotesys_secret@postgres:5432/quotesys_db
+      REDIS_URL: redis://redis:6379/0
+      APP_NAME: quote-service
+      UPLOAD_DIR: /app/data/uploads
+      AUTH_SECRET: quotesys-secret-key-production-change-me
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - backend_data:/app/data
+    restart: unless-stopped
+
+  web:
+    image: nginx:alpine
+    container_name: quotesys-web
+    ports:
+      - "80:80"
+    volumes:
+      - ./Workbench/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_data:

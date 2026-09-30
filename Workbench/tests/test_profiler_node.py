@@ -32,24 +32,37 @@ def _state(manifest: dict) -> AgentGraphState:
 
 class ProfilerNodeTests(unittest.TestCase):
     def test_detects_excel_product_package_and_binding_sources(self):
-        root = Path(__file__).resolve().parents[2] / "assets"
-        with patch.object(settings, "assets_dir", str(root)):
-            result = profiler_node(_state(build_manifest(root)))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            import openpyxl
 
-        plan = result["sources_plan"]
-        self.assertTrue(
-            any(item["locator"].get("sheet") == "SKU主表" for item in plan["products"])
-        )
-        self.assertTrue(
-            any(item["locator"].get("sheet") == "套餐定义表" for item in plan["packages"])
-        )
-        self.assertTrue(
-            any(
-                item["locator"].get("sheet") == "SKU主表"
-                and item["locator"].get("column") == "适用设备"
-                for item in plan["bindings"]
+            wb = openpyxl.Workbook()
+            ws1 = wb.active
+            ws1.title = "SKU主表"
+            ws1.append(["sku_id", "产品名称", "最低价", "单位", "适用设备", "包装规格", "备注"])
+            ws1.append(["P001", "超声波治疗仪CSY-200（台式）", 2500, "台", "", "", ""])
+            ws2 = wb.create_sheet("套餐定义表")
+            ws2.append(["套餐编号", "套餐名称", "商品组合", "套餐售价", "备注"])
+            ws2.append(["PKG001", "超声治疗（台式）推广套餐", "P001*1", 6000, "促销买赠"])
+            wb.save(root / "产品最低价格.xlsx")
+
+            with patch.object(settings, "assets_dir", str(root)):
+                result = profiler_node(_state(build_manifest(root)))
+
+            plan = result["sources_plan"]
+            self.assertTrue(
+                any(item["locator"].get("sheet") == "SKU主表" for item in plan["products"])
             )
-        )
+            self.assertTrue(
+                any(item["locator"].get("sheet") == "套餐定义表" for item in plan["packages"])
+            )
+            self.assertTrue(
+                any(
+                    item["locator"].get("sheet") == "SKU主表"
+                    and item["locator"].get("column") == "适用设备"
+                    for item in plan["bindings"]
+                )
+            )
 
     def test_detects_markdown_sections_and_plain_text(self):
         with tempfile.TemporaryDirectory() as tmp:
