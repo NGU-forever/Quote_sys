@@ -1,9 +1,9 @@
-"""Offline LangGraph configuration and local SQLite checkpoint lifecycle."""
+"""Offline LangGraph configuration and PostgreSQL checkpoint lifecycle."""
 import os
-import sqlite3
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Iterator
+
+from sqlalchemy.engine import make_url
 
 from app.core.config import settings
 
@@ -16,27 +16,27 @@ def init_offline_env() -> None:
 
 init_offline_env()
 
-from langgraph.checkpoint.sqlite import SqliteSaver  # noqa: E402
+from langgraph.checkpoint.postgres import PostgresSaver  # noqa: E402
 
 
-def checkpoint_db_path() -> Path:
-    """Return the checkpoint file beside the configured SQLite database."""
-    prefix = "sqlite:///"
-    if settings.database_url.startswith(prefix):
-        raw = settings.database_url[len(prefix) :]
-        if raw and raw != ":memory:":
-            return Path(raw).resolve().parent / "agent_checkpoints.db"
-    return Path("data/agent_checkpoints.db").resolve()
+def checkpoint_conn_string() -> str:
+    """Return a libpq connection string for LangGraph's Postgres checkpointer.
+
+    LangGraph 使用 psycopg 直连，不接受 SQLAlchemy 的 ``+psycopg`` 驱动后缀，
+    因此这里把 ``postgresql+psycopg://`` 规范化成 ``postgresql://``。
+    """
+    url = make_url(settings.database_url)
+    return url.set(drivername="postgresql").render_as_string(hide_password=False)
 
 
 @contextmanager
-def get_checkpointer() -> Iterator[SqliteSaver]:
-    """Open a short-lived SQLite checkpointer owned by the current run."""
+def get_checkpointer() -> Iterator[PostgresSaver]:
+    """Open a short-lived PostgreSQL checkpointer owned by the current run.
+
+    ``setup()`` 会幂等地创建 checkpoint 元数据表（langgraph 迁移表控制），
+    首次运行后为无操作。
+    """
     init_offline_env()
-    db_path = checkpoint_db_path()
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(str(db_path), check_same_thread=False)
-    try:
-        yield SqliteSaver(connection)
-    finally:
-        connection.close()
+    with PostgresSaver.from_conn_string(checkpoint_conn_string()) as checkpointer:
+        checkpointer.setup()
+        yield checkpointer

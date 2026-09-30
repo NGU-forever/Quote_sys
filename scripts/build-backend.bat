@@ -4,10 +4,10 @@ REM Prerequisite: Python 3.10+ installed and added to PATH.
 setlocal
 cd /d "%~dp0.."
 
-if not exist "Workbench\data\app.db" (
-    echo [data] Workbench\data\app.db not found, package without bundled initial database
+if not exist "Workbench\data\seed.sql" (
+    echo [data] Workbench\data\seed.sql not found, package without bundled initial data
 ) else (
-    echo [data] Bundling Workbench\data\app.db into QuoteService.exe
+    echo [data] Bundling Workbench\data\seed.sql into QuoteService.exe
 )
 
 echo [1/4] Building workbench frontend (Workbench\web\dist\workbench.html)

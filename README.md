@@ -26,7 +26,7 @@
 **QuoteSys** 是一套开箱即用、面向多行业的通用商业报价模版系统。针对企业在销售报价环节中存在的“品类层级复杂、底价泄露风险、多人单号冲突、离线协同困难、安装部署繁琐”等痛点，提供了一套前后端解耦、架构稳固、可灵活单机亦可云端集群的完整解决方案。
 
 - 📦 **多品类商品中心与定价引擎**：统一纳管标准设备（主品）、配套耗材/辅件、优惠推广套餐，支持阶梯折扣、底价保护线与设备-耗材兼容性动态校验。
-- 🛡 **企业级高可靠持久化**：生产环境默认采用 **PostgreSQL 16** 高并发关系型数据库；同时内置双引擎兼容层，单机离线模式无缝支持 **SQLite**，零配置开箱即用。
+- 🛡 **企业级高可靠持久化**：统一采用 **PostgreSQL 16** 高并发关系型数据库（生产、单机离线与测试同一引擎），支撑并发写入、事务一致性与在线备份。
 - ⚡ **Redis 7 目录缓存与分布式原子单号**：商品目录与系统设置全量缓存（`quote:catalog:data`），毫秒级极速检索；基于 Redis INCR 实现并发安全的每日单号自增（`QT-YYYYMMDD-XXXX`），杜绝重号漏号。
 - 👥 **多角色权限隔离与协同闭环**：
   - **管理端（Admin）**：商品字典维护、底价把控、员工账号启用/停用、全公司报价单归档与导出。
@@ -63,9 +63,8 @@ flowchart TB
     end
 
     subgraph DataLayer["数据存储与缓存层"]
-        PostgresDB[("🐘 PostgreSQL 16\n(生产主库: 5432)")]
+        PostgresDB[("🐘 PostgreSQL 16\n(唯一主库: 5432)")]
         RedisCache[("⚡ Redis 7\n(目录缓存与单号原子计数: 6379)")]
-        LocalSQLite[("📂 SQLite (本地/单机母机离线存储)")]
     end
 
     WebAdmin -->|HTTP / SPA| Nginx
@@ -73,8 +72,7 @@ flowchart TB
     ElectronClient -->|局域网 HTTP / UDP 探测| QuoteService
 
     QuoteService --> Modules
-    Modules -->|双引擎 ORM| PostgresDB
-    Modules -.->|单机无缝回退| LocalSQLite
+    Modules -->|SQLAlchemy ORM| PostgresDB
     Modules -->|TTL 缓存 / 原子 INCR| RedisCache
 ```
 
@@ -118,7 +116,8 @@ flowchart TB
 #### 1. 前置依赖
 - **Node.js** >= 18.x
 - **Python** >= 3.11
-- **Redis** 7.x（本地启动，或使用 Docker 单独启动 `docker run -d -p 6379:6379 redis:7-alpine`）
+- **PostgreSQL** 16（推荐用 Docker 只启动数据库：`docker compose up -d postgres`）
+- **Redis** 7.x（可选，不可用时自动降级；或 `docker run -d -p 6379:6379 redis:7-alpine`）
 
 #### 2. 初始化后端环境 (`Workbench/`)
 ```bash
@@ -129,6 +128,9 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
 # 安装 Python 依赖
 pip install -r requirements.txt
+
+# 配置数据库连接（默认已指向本机 5432 的 quotesys_db）
+cp .env.example .env
 
 # 启动后端服务 (默认监听 127.0.0.1:8000，首次运行自动建表并播种 admin 账号)
 uvicorn app.main:app --reload --port 8000
@@ -165,7 +167,7 @@ npm run build:backend
 - **产物位置**：`release/QuoteService.exe`
 - **特性**：
   - 托盘图标驻留，右键一键打开工作台、打开数据目录、设置开机自启；
-  - 自动管理 `%APPDATA%\QuoteSys` 数据库与照片目录；
+  - 数据目录 `%APPDATA%\QuoteSys` 存放照片与数据库连接配置 `database_url.txt`（连接串优先取环境变量 `DATABASE_URL`）；
   - 命名互斥锁防止重复多开端口冲突。
 
 ### 2. 生成 Windows 安装器 (`QuoteSys-Service-Setup.exe`)
@@ -205,7 +207,7 @@ npm run build:client
 | :--- | :--- | :--- |
 | `APP_ENV` | `development` | 运行环境：`development` 或 `production` |
 | `APP_NAME` | `quote-service` | 后端服务名称标识 |
-| `DATABASE_URL` | `sqlite:///./data/app.db` | 数据库连接串。生产环境设为 `postgresql+psycopg://user:pwd@host:5432/quotesys_db` |
+| `DATABASE_URL` | `postgresql+psycopg://postgres:postgres@localhost:5432/quotesys_db` | 数据库连接串（**仅支持 PostgreSQL**，`postgresql+psycopg://` 协议）|
 | `REDIS_URL` | `redis://localhost:6379/0` | Redis 连接串，用于商品目录全量缓存与单号原子自增 |
 | `AUTH_SECRET` | `quotesys-auth-secret-key` | JWT Token 签名密钥（生产环境务必替换为 32 位以上随机强密钥） |
 | `TOKEN_TTL_SECONDS`| `43200` (12小时) | 登录凭证有效时长（秒） |
@@ -237,7 +239,7 @@ Quote_Sys/
     ├── app/                        # FastAPI 现代后端服务架构
     │   ├── api/                    # 路由端点 (quotes, employees, auth, catalog)
     │   ├── core/                   # 核心配置、JWT 鉴权、异常捕获
-    │   ├── db/                     # SQLAlchemy 2.0 模型基类、双引擎连接与种子数据
+    │   ├── db/                     # SQLAlchemy 2.0 模型基类、PostgreSQL 连接与种子数据
     │   ├── models/                 # 数据模型 (Product, User, Quote, DeviceBinding)
     │   └── services/               # 业务领域服务 (QuoteService, CatalogService)
     ├── web/                        # Web 管理后台前端 (Vue 3 + Pinia + Lucide)
@@ -255,13 +257,17 @@ Quote_Sys/
 项目拥有完整的测试套件，全面覆盖数据模型、权限校验、Redis 缓存与单号原子性：
 
 ```bash
-# 执行全部 68 项自动化测试
-PYTHONPATH=Workbench Workbench/.venv/bin/pytest Workbench/tests/
+# 1. 先启动 PostgreSQL（测试库会自动创建，连接串见 Workbench/tests/db_support.py）
+docker compose up -d postgres
+
+# 2. 执行全部 68 项自动化测试
+cd Workbench && .venv/bin/python -m pytest tests -q
+# 自定义测试库：TEST_DATABASE_URL=postgresql+psycopg://user:pwd@host:5432/quotesys_test
 ```
 
 测试覆盖清单：
 - ✅ `test_models.py`：商品、套餐、员工用户、报价单 ORM 映射与级联关系
-- ✅ `test_infra.py`：PostgreSQL / SQLite 双引擎连接与 Redis 探测
+- ✅ `test_infra.py`：PostgreSQL 连接、健康检查与 Redis 优雅降级探测
 - ✅ `test_quote_api.py`：报价创建、底价校验、多角色行级权限隔离、防重复自增号
 - ✅ `test_extractors.py` & `test_quality_nodes.py`：AI 资料导入与规则校验
 

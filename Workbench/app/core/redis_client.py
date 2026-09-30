@@ -1,7 +1,7 @@
 """Redis 客户端管理器与连接池（支持优雅降级）。
 
 当 Redis 未启动或不可用时，记录 warning 日志并优雅降级为 None，
-保证核心报价与离线 SQLite 业务不被阻塞。
+保证核心报价业务不被阻塞。
 """
 from __future__ import annotations
 

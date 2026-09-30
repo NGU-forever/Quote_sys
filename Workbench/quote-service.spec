@@ -4,14 +4,10 @@
 # 用法（在 Windows 上）：
 #   1. 构建工作台前端：cd web && npm run build   （产出 Workbench/web/dist/workbench.html + assets）
 #   2. 打包：          cd Workbench && pyinstaller quote-service.spec --clean --noconfirm
-import atexit
 import os
-import shutil
-import sqlite3
-import tempfile
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_dynamic_libs, collect_submodules, copy_metadata
+from PyInstaller.utils.hooks import collect_submodules, copy_metadata
 
 block_cipher = None
 
@@ -21,54 +17,22 @@ workbench_build = backend_dir / "web" / "dist"
 workbench_dest = "workbench"  # 打进 exe 内的目录名（entry.py 的 resource_dir()/workbench）
 
 datas = []
-_seed_tmp = None
-
-
-def sanitize_seed_db(source: Path) -> Path:
-    """复制并清理种子库：不把 AI API Key / Agent 运行历史打进 exe。"""
-    global _seed_tmp
-    _seed_tmp = Path(tempfile.mkdtemp(prefix="quotesys-seed-"))
-    target = _seed_tmp / source.name
-    shutil.copy2(source, target)
-    con = sqlite3.connect(str(target))
-    for statement in (
-        "DELETE FROM app_settings WHERE key = 'agent_ai';",
-        "DELETE FROM import_run_events;",
-        "DELETE FROM import_runs;",
-    ):
-        try:
-            con.execute(statement)
-        except sqlite3.OperationalError:
-            # 旧种子库尚未建对应表时无需清理
-            pass
-    con.commit()
-    con.close()
-    print(f"[spec] 种子库已消毒（清除 agent_ai / Agent 运行记录）：{target}")
-    return target
-
-
-def cleanup_seed_tmp() -> None:
-    if _seed_tmp is not None:
-        shutil.rmtree(_seed_tmp, ignore_errors=True)
-
-
-atexit.register(cleanup_seed_tmp)
 
 if (workbench_build / "workbench.html").exists():
     datas.append((str(workbench_build / "workbench.html"), workbench_dest))
     if (workbench_build / "assets").exists():
         datas.append((str(workbench_build / "assets"), os.path.join(workbench_dest, "assets")))
 
-# 可选的初始数据：把当前本地库（Workbench/data/app.db）和 uploads 里的图片
-# 一并打进 exe。QuoteService 首次启动且 %APPDATA%\QuoteSys\app.db 不存在时复制，
-# 已有数据不会被覆盖。
-seed_db = backend_dir / "data" / "app.db"
+# 可选初始数据：把 Workbench/data/seed.sql 与 uploads 图片打进 exe。
+# QuoteService 首次启动且数据库中还没有业务表时导入 seed.sql（entry.py 负责），
+# 已有数据的库不会被覆盖。
+seed_sql = backend_dir / "data" / "seed.sql"
 seed_uploads = backend_dir / "uploads"
-if seed_db.exists():
-    datas.append((str(sanitize_seed_db(seed_db)), "seed"))
-    print("[spec] 初始数据库已消毒后打入 exe（源 Workbench/data/app.db 不变）")
+if seed_sql.exists():
+    datas.append((str(seed_sql), "seed"))
+    print("[spec] 初始数据 seed.sql 已打入 exe（源 Workbench/data/seed.sql 不变）")
 else:
-    print("[spec] 未找到 Workbench/data/app.db，本次打包不含初始数据库")
+    print("[spec] 未找到 Workbench/data/seed.sql，本次打包不含初始数据")
 if seed_uploads.exists():
     for p in seed_uploads.rglob("*"):
         if not p.is_file():
@@ -81,17 +45,16 @@ if seed_uploads.exists():
     if datas and any("seed/uploads" in d[1] for d in datas):
         print("[spec] uploads 图片已打入作为初始数据")
 
-# LangGraph loads checkpoint implementations dynamically and sqlite-vec ships
-# a native extension that PyInstaller cannot infer from static imports alone.
-binaries = collect_dynamic_libs("sqlite_vec")
-datas += copy_metadata("langgraph-checkpoint-sqlite")
+# LangGraph 动态加载 checkpoint 实现：显式收集子模块与包元数据，
+# PyInstaller 仅靠静态导入无法推断 PostgresSaver 的迁移脚本。
+datas += copy_metadata("langgraph-checkpoint-postgres")
+datas += copy_metadata("psycopg")
 langgraph_hiddenimports = collect_submodules("langgraph.checkpoint")
 websockets_hiddenimports = collect_submodules("websockets")
 
 a = Analysis(
     ["entry.py"],
     pathex=[str(backend_dir)],
-    binaries=binaries,
     datas=datas,
     hiddenimports=[
         "uvicorn.logging",
@@ -104,8 +67,8 @@ a = Analysis(
         "docx",
         "lxml",
         "httpx",
-        "aiosqlite",
-        "sqlite_vec",
+        "psycopg",
+        "psycopg_pool",
         *websockets_hiddenimports,
         *langgraph_hiddenimports,
     ],

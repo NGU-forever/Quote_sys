@@ -4,7 +4,7 @@ uvicorn[standard]>=0.29,<1.0
 
 # Database / ORM (SQLAlchemy 2.x)
 sqlalchemy>=2.0.29,<3.0
-# PostgreSQL driver (only needed when DATABASE_URL points to postgres; SQLite uses builtin sqlite3)
+# PostgreSQL driver (唯一支持的数据库；同时供 LangGraph PostgresSaver 直连使用)
 psycopg[binary]>=3.1.18,<4.0
 
 # Caching / Redis
@@ -28,9 +28,9 @@ openpyxl>=3.1,<4.0
 python-docx>=1.1,<2.0
 httpx>=0.27,<1.0
 
-# Agent graph orchestration + local checkpoints
+# Agent graph orchestration + PostgreSQL checkpoints
 langgraph>=1.2,<2.0
-langgraph-checkpoint-sqlite>=3.1,<4.0
+langgraph-checkpoint-postgres>=3.1,<4.0
 
 # Windows tray service (exe mode)
 pystray>=0.19,<1.0

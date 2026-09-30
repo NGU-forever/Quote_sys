@@ -1,6 +1,6 @@
 """数据库连接与 ORM 基础类。
 
-- 默认 SQLite（开发/现有库），通过 DATABASE_URL 可切换到 PostgreSQL。
+- 仅使用 PostgreSQL（DATABASE_URL 为 postgresql+psycopg:// 连接串）。
 - 不修改现有表：Base.metadata.create_all 仅在表缺失时创建（checkfirst=True），
   已存在的 users / products / packages / device_bindings 保持原样。
 """
@@ -13,18 +13,12 @@ from app.core.config import settings
 
 
 def now_str() -> str:
-    """返回与现有库 datetime('now','localtime') 一致的本地时间字符串。"""
+    """返回本地时间字符串，作为各表 created_at / updated_at 的统一格式。"""
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-# SQLite 需要额外连接参数（FastAPI 依赖注入会在不同线程使用同一连接池）
-connect_args: dict = {}
-if settings.database_url.startswith("sqlite"):
-    connect_args["check_same_thread"] = False
-
 engine = create_engine(
     settings.database_url,
-    connect_args=connect_args,
     pool_pre_ping=True,
     future=True,
 )

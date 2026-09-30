@@ -8,7 +8,9 @@ workbench_dir = Path(__file__).resolve().parent.parent
 if str(workbench_dir) not in sys.path:
     sys.path.insert(0, str(workbench_dir))
 
-from sqlalchemy import create_engine, select
+from tests import db_support  # noqa: E402  # 统一测试库连接，必须在 app.* 之前导入
+
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.base import Base
@@ -29,8 +31,8 @@ from app.db.seed import seed_reserved_admin
 
 class TestModels(unittest.TestCase):
     def setUp(self):
-        self.engine = create_engine("sqlite:///:memory:", future=True)
-        Base.metadata.create_all(bind=self.engine)
+        self.engine = db_support.create_test_engine()
+        db_support.reset_schema(self.engine)
         self.Session = sessionmaker(bind=self.engine, future=True)
 
     def tearDown(self):
@@ -282,7 +284,8 @@ class TestModels(unittest.TestCase):
             self.assertIsNotNone(admin.real_name)
 
         # Test init_db with sample data option
-        engine_sample = create_engine("sqlite:///:memory:", future=True)
+        engine_sample = db_support.create_test_engine()
+        db_support.reset_schema(engine_sample)
         init_db(engine=engine_sample, seed_sample_data=True)
         SessionSample = sessionmaker(bind=engine_sample, future=True)
         with SessionSample() as db:
@@ -301,8 +304,8 @@ class TestModels(unittest.TestCase):
 
 # Standalone functions for pytest compatibility
 def test_pytest_models_lifecycle():
-    engine = create_engine("sqlite:///:memory:", future=True)
-    Base.metadata.create_all(bind=engine)
+    engine = db_support.create_test_engine()
+    db_support.reset_schema(engine)
     Session = sessionmaker(bind=engine, future=True)
     with Session() as db:
         user = User(username="u1", password_hash="p", salt="s", real_name="测试用户", role="sales")

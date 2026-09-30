@@ -1,27 +1,33 @@
 """数据生成 Agent 验收测试。
 
-运行前本模块会把自己的 DATABASE_URL 指向临时 SQLite（复制 Workbench/data/app.db），
-确保测试不修改开发库：
+本模块把 DATABASE_URL 指向 PostgreSQL 测试库（见 tests/db_support.py），
+并在 setUpModule 里重置 schema，确保测试不修改开发库：
+    docker compose up -d postgres
     cd Workbench && .venv/bin/python -m unittest tests.test_agent -v
 """
 import atexit
+import copy
 import os
 import shutil
+import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
 
-_repo_root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 _tmp_dir = Path(tempfile.mkdtemp(prefix="quotesys-agent-tests-"))
-_tmp_db = _tmp_dir / "app.db"
 _tmp_assets = _tmp_dir / "assets"
 _tmp_assets.mkdir(parents=True, exist_ok=True)
 
-os.environ["DATABASE_URL"] = f"sqlite:///{_tmp_db}"
+# 注意：这些环境变量必须在导入 tests.db_support（进而导入 app.core.config）之前设置，
+# 否则 settings 单例已经按默认值初始化。
 os.environ["ASSETS_DIR"] = str(_tmp_assets)
 os.environ["LLM_PROVIDER"] = "mock"
 os.environ["AGENT_DEFAULT_MODE"] = "apply"
+
+from tests import db_support  # noqa: E402  # 统一测试库连接，必须在 app.* 之前导入
 
 import openpyxl  # noqa: E402
 from app.agent.mock_provider import DEMO_PRODUCTS, DEMO_PACKAGES, DEMO_CANDIDATES  # noqa: E402
@@ -50,21 +56,26 @@ from app.agent.readers.manifest import build_manifest  # noqa: E402
 from app.agent.validation import validate_candidates  # noqa: E402
 from app.agent import agent_service  # noqa: E402
 from app.agent.persistence import apply_candidates  # noqa: E402
-from app.db.base import Base, SessionLocal, engine  # noqa: E402
+from app.db.base import SessionLocal, engine  # noqa: E402
 from app.db.seed import seed_reserved_admin, seed_app_settings  # noqa: E402
 from app.main import app  # noqa: E402
 
-Base.metadata.create_all(bind=engine)
-with SessionLocal() as db:
-    seed_reserved_admin(db)
-    seed_app_settings(db)
-    import copy
-    init_candidates = copy.deepcopy(DEMO_CANDIDATES)
-    for p in init_candidates["products"]:
-        if p["sku_id"] == "P013":
-            p["max_price"] = None
-            p["raw_price_desc"] = "≥6000"
-    apply_candidates(db, init_candidates, mode="apply")
+def setUpModule() -> None:
+    """模块级准备：重置测试库并写入 Agent 验收所需的基线数据。
+
+    测试库被所有测试模块共享，因此模块开始前必须显式重置 schema，
+    否则上一个模块残留的数据会污染本模块的断言。
+    """
+    db_support.reset_schema(engine)
+    with SessionLocal() as db:
+        seed_reserved_admin(db)
+        seed_app_settings(db)
+        init_candidates = copy.deepcopy(DEMO_CANDIDATES)
+        for p in init_candidates["products"]:
+            if p["sku_id"] == "P013":
+                p["max_price"] = None
+                p["raw_price_desc"] = "≥6000"
+        apply_candidates(db, init_candidates, mode="apply")
 
 
 def _cleanup():
@@ -342,9 +353,14 @@ class AgentRunTests(unittest.TestCase):
         ]
         self.assertTrue(all(position >= 0 for position in positions), summaries)
         self.assertEqual(positions, sorted(positions), summaries)
-        from app.agent.graph.config import checkpoint_db_path
+        # LangGraph 检查点已落库 PostgreSQL（表由 PostgresSaver.setup() 创建）
+        from sqlalchemy import text
 
-        self.assertTrue(checkpoint_db_path().is_file())
+        with engine.connect() as conn:
+            checkpoint_rows = conn.execute(
+                text("SELECT count(*) FROM checkpoints")
+            ).scalar()
+        self.assertGreater(checkpoint_rows, 0)
         with SessionLocal() as db:
             from app.models.device_binding import DeviceBinding
             from app.models.package import Package

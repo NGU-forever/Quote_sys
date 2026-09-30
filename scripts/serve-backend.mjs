@@ -40,8 +40,8 @@ if (existsSync(uvicorn)) {
 
 if (!existsSync(envFile)) {
   console.warn(
-    '[backend] 未找到 Workbench/.env：将使用内置默认配置（Workbench/data/app.db 全新空库）。' +
-      '如需连接现有工作台数据库，请复制 Workbench/.env.example 为 Workbench/.env。'
+    '[backend] 未找到 Workbench/.env：将使用内置默认配置（本机 PostgreSQL）。' +
+      '如需连接指定数据库，请复制 Workbench/.env.example 为 Workbench/.env。'
   )
 }
 

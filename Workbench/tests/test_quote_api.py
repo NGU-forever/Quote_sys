@@ -20,10 +20,11 @@ workbench_dir = Path(__file__).resolve().parent.parent
 if str(workbench_dir) not in sys.path:
     sys.path.insert(0, str(workbench_dir))
 
+from tests import db_support  # noqa: E402  # 统一测试库连接，必须在 app.* 之前导入
+
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select
+from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from app.core.config import get_settings
 from app.core.deps import get_db
@@ -56,13 +57,8 @@ from app.services.quote_service import (
 
 class TestQuoteAPI(unittest.TestCase):
     def setUp(self):
-        self.engine = create_engine(
-            "sqlite:///:memory:",
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
-            future=True,
-        )
-        Base.metadata.create_all(bind=self.engine)
+        self.engine = db_support.create_test_engine()
+        db_support.reset_schema(self.engine)
         self.Session = sessionmaker(bind=self.engine, future=True)
 
 

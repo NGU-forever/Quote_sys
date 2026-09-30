@@ -1,18 +1,20 @@
 """QuoteSys 数据服务 — Windows 托盘后台服务入口。
 
 职责：
-1. 确定数据目录 %APPDATA%\\QuoteSys（app.db + uploads）；
+1. 确定数据目录 %APPDATA%\\QuoteSys（uploads + 数据库地址配置）；
 2. 后台线程起 uvicorn 0.0.0.0:8000（局域网可达）；
 3. 托盘菜单：打开工作台 / 打开数据目录 / 开机自启(开关) / 退出；
 4. 首次运行自动用默认浏览器打开工作台（等待服务就绪后再打开）；
-5. 首启且数据目录无 app.db 时，自动导入打包时内嵌的初始数据。
+5. 首启且数据库中还没有业务表时，自动导入打包时内嵌的 seed/seed.sql。
+
+数据库：仅 PostgreSQL，连接串按「环境变量 DATABASE_URL → 数据目录
+database_url.txt → 内置默认值（本机 5432）」的顺序解析。
 
 打包（在 Windows 上）：
     先构建工作台前端：`cd web && npm run build`（产出 web/dist/workbench.html + web/dist/assets）
     再打包：     `cd Workbench && pyinstaller quote-service.spec --clean --noconfirm`
 """
 import os
-import shutil
 import socket
 import sys
 import threading
@@ -23,6 +25,11 @@ from pathlib import Path
 HOST = "0.0.0.0"
 PORT = 8000
 AUTOSTART_NAME = "QuoteService"
+# 数据库连接串配置文件（放在数据目录，便于现场修改而不必重新打包）
+DB_URL_FILE = "database_url.txt"
+DEFAULT_DATABASE_URL = (
+    "postgresql+psycopg://quotesys_user:quotesys_secret@127.0.0.1:5432/quotesys_db"
+)
 
 
 def resource_dir() -> Path:
@@ -38,31 +45,52 @@ def data_dir() -> Path:
     return d
 
 
+def configured_database_url() -> str:
+    """解析 PostgreSQL 连接串：环境变量 → 数据目录配置 → 内置默认值。"""
+    env_value = (os.environ.get("DATABASE_URL") or "").strip()
+    if env_value:
+        return env_value
+
+    config_file = data_dir() / DB_URL_FILE
+    if config_file.exists():
+        try:
+            file_value = config_file.read_text(encoding="utf-8").strip()
+        except OSError:
+            file_value = ""
+        if file_value:
+            return file_value
+
+    return DEFAULT_DATABASE_URL
+
+
 def provision_initial_data() -> None:
-    """首次启动把打包时内嵌的 app.db/uploads 复制到数据目录。"""
-    d = data_dir()
-    if (d / "app.db").exists():
+    """首次启动且数据库尚无业务表时，导入打包时内嵌的 seed/seed.sql。
+
+    没有内嵌 dump（或数据库已经建过表）时直接跳过：表结构与管理员账号
+    由应用启动时的 create_all + 播种逻辑负责。
+    """
+    dump = resource_dir() / "seed" / "seed.sql"
+    if not dump.exists():
         return
 
-    seed = resource_dir() / "seed"
-    if not seed.exists():
+    try:
+        import psycopg
+        from sqlalchemy.engine import make_url
+    except ImportError:  # pragma: no cover - 打包环境必然带有依赖
         return
 
-    bundled_db = seed / "app.db"
-    if bundled_db.exists():
-        shutil.copy2(bundled_db, d / "app.db")
-
-    bundled_uploads = seed / "uploads"
-    if bundled_uploads.exists():
-        uploads_dir = d / "uploads"
-        for src in bundled_uploads.rglob("*"):
-            if not src.is_file():
-                continue
-            dst = uploads_dir / src.relative_to(bundled_uploads)
-            if dst.exists():
-                continue
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
+    conninfo = (
+        make_url(configured_database_url())
+        .set(drivername="postgresql")
+        .render_as_string(hide_password=False)
+    )
+    try:
+        with psycopg.connect(conninfo, autocommit=True, connect_timeout=10) as conn:
+            if conn.execute("SELECT to_regclass('public.users')").fetchone()[0] is not None:
+                return
+            conn.execute(dump.read_text(encoding="utf-8"))
+    except Exception as exc:  # 初始数据导入失败不应阻止服务启动
+        print(f"[entry] 初始数据导入失败（已跳过）：{exc}")
 
 
 def ensure_workbench_dir() -> Path:
@@ -74,9 +102,9 @@ def ensure_workbench_dir() -> Path:
 
 
 def apply_env() -> None:
-    """在导入 app.main 之前写入运行环境（数据目录 / 上传目录 / 工作台静态目录）。"""
+    """在导入 app.main 之前写入运行环境（数据库 / 上传目录 / 工作台静态目录）。"""
     d = data_dir()
-    os.environ["DATABASE_URL"] = f"sqlite:///{d / 'app.db'}"
+    os.environ["DATABASE_URL"] = configured_database_url()
     os.environ["UPLOAD_DIR"] = str(d / "uploads")
     os.environ["WORKBENCH_DIR"] = str(ensure_workbench_dir())
     assets_dir = d / "assets"

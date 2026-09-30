@@ -1,20 +1,23 @@
 """LangGraph 多形态资料与套餐防发散端到端验收。"""
+import sys
 import tempfile
 import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from tests import db_support  # noqa: E402  # 统一测试库连接，必须在 app.* 之前导入
+
 from docx import Document
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from app.agent.graph.builder import build_import_graph
 from app.agent.graph.runtime import GraphRuntime
 from app.agent.llm_client import LLMResponse, ToolCall
 from app.core.config import settings
-from app.db.base import Base
 from app.models.device_binding import DeviceBinding
 from app.models.package import Package
 from app.models.product import Product
@@ -37,12 +40,8 @@ class RecordingProvider:
 
 
 def _db_session():
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(bind=engine)
+    engine = db_support.create_test_engine()
+    db_support.reset_schema(engine)
     return sessionmaker(bind=engine, autoflush=False, autocommit=False)()
 
 

@@ -33,15 +33,6 @@ async def lifespan(app: FastAPI):
         seed_reserved_admin(db)
         seed_app_settings(db)
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
-    # SQLite 库所在目录不存在时自动创建（如 backend/data），保证开箱即用
-    if settings.database_url.startswith("sqlite:///"):
-        db_rel = settings.database_url[len("sqlite:///") :]
-        if db_rel and db_rel != ":memory:":
-            db_dir = Path(db_rel).resolve().parent if not db_rel.startswith("/") else Path(db_rel).parent
-            try:
-                db_dir.mkdir(parents=True, exist_ok=True)
-            except OSError:
-                pass
     yield
 
 

@@ -11,11 +11,6 @@ release/
 *.zip
 
 # Database & Runtime Data
-*.db
-*.db-journal
-*.sqlite3
-data/*.db
-data/*.sqlite3
 quotesys_pgdata/
 quotesys_redisdata/
 uploads/products/*

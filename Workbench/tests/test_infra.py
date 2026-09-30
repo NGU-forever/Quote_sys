@@ -10,6 +10,8 @@ workbench_dir = Path(__file__).resolve().parent.parent
 if str(workbench_dir) not in sys.path:
     sys.path.insert(0, str(workbench_dir))
 
+from tests import db_support  # noqa: E402,F401  # 统一测试库连接，必须在 app.* 之前导入
+
 from fastapi.testclient import TestClient
 from app.main import app
 from app.core.config import get_settings
@@ -17,6 +19,11 @@ from app.core import redis_client
 
 
 class TestInfra(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # TestClient(app) 会触发 lifespan 建表，先确保测试库存在
+        db_support.ensure_test_database()
+
     def test_health_check_quote_service(self):
         client = TestClient(app)
         response = client.get("/api/health")

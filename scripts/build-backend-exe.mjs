@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url'
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const isWin = process.platform === 'win32'
 const exeName = 'QuoteService.exe'
-const seedDb = path.join(repoRoot, 'Workbench', 'data', 'app.db')
+const seedSql = path.join(repoRoot, 'Workbench', 'data', 'seed.sql')
 const IMAGE = 'batonogov/pyinstaller-windows:latest'
 
 function fail(msg) {
@@ -32,12 +32,12 @@ function fail(msg) {
   process.exit(1)
 }
 
-if (existsSync(seedDb)) {
-  console.log('[build-backend] 将把 Workbench/data/app.db 作为初始数据打入 exe。')
+if (existsSync(seedSql)) {
+  console.log('[build-backend] 将把 Workbench/data/seed.sql 作为初始数据打入 exe。')
 } else {
   console.warn(
-    '[build-backend] 未找到 Workbench/data/app.db，本次打包不带当前本地数据库；' +
-      '若需随包分发数据，请先把目标 app.db 放到 Workbench/data/ 后重试。'
+    '[build-backend] 未找到 Workbench/data/seed.sql，本次打包不带初始数据；' +
+      '若需随包分发数据，请先导出目标数据库（pg_dump）到 Workbench/data/seed.sql 后重试。'
   )
 }
 

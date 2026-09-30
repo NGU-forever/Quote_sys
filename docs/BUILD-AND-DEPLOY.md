@@ -3,7 +3,7 @@
 本手册回答一句话需求：**前后端都要既能「本地用代码直跑」，也能「本地打包成 exe 后部署到 Windows」**。
 平台形态是两个独立 Windows 程序（主从局域网架构，详见 `docs/USER-GUIDE.md`）：
 
-- **主设备** `HHZDataService.exe`：后端数据服务（FastAPI + SQLite + 托盘）+ 托管的工作台网页；
+- **主设备** `HHZDataService.exe`：后端数据服务（FastAPI + PostgreSQL + 托盘）+ 托管的工作台网页；
 - **客户机** `超声医疗报价平台.exe`：报价落地页桌面壳（Electron），开机向主设备同步。
 
 > 本仓库两套系统、同一仓库：`Quote/`（副系统·报价版，含 Electron 壳、报价计算器与只读同步层）与 `Workbench/`（主系统·FastAPI 后端 + `Workbench/web` 工作台前端）。
@@ -42,10 +42,11 @@ cd Workbench/web
 npm install
 # 部署主机端的npm
 pip install -r requirements.txt
-cp .env.example .env     # 默认连 Workbench/data/app.db、照片目录 Workbench/uploads
+cp .env.example .env     # 默认连本机 PostgreSQL（quotesys_db）、照片目录 Workbench/uploads
 ```
 
-> 代码直跑时后端数据在 `Workbench/data/app.db`；打成 exe 后在 `%APPDATA%\HHZ\app.db`（见 §4 数据迁移）。
+> 后端数据统一存放在 PostgreSQL（开发与 exe 部署使用同一引擎）；exe 的数据目录仅保存
+> 上传图片与数据库连接配置（`%APPDATA%\QuoteSys\database_url.txt`，见 §4 数据迁移）。
 
 ---
 
@@ -114,7 +115,7 @@ node scripts/build-backend-exe.mjs
   3. 产物复制为 `release/HHZDataService.exe`；
   4. Apple Silicon 走 amd64 模拟，首次构建较慢（数分钟～半小时属正常）；
   5. pip 慢时换国内源：`PYPI_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple node scripts/build-backend-exe.mjs`。
-- **初始数据随包**：打包时会读取当前本地库 `Workbench/data/app.db` 及 `Workbench/uploads/` 中已有图片，一并内嵌进 `HHZDataService.exe`。在 Windows 主设备上**首次运行**（`%APPDATA%\HHZ\app.db` 不存在）时自动复制到数据目录；已运行过/已有数据的机器不会被覆盖。若未找到 `Workbench/data/app.db`，构建脚本会提示，产出的将是不带初始数据的空库包。
+- **初始数据随包**：打包时可把 `Workbench/data/seed.sql`（用 `pg_dump` 从目标库导出）与 `Workbench/uploads/` 中已有图片内嵌进 exe。在 Windows 主设备上**首次运行**且数据库中还没有业务表时，自动导入 `seed.sql` 并写入图片到数据目录；已运行过/已有数据的库不会被覆盖。若未找到 `Workbench/data/seed.sql`，构建脚本会提示，产出的将是不带初始数据的包。
 
 > **安装版（NSIS）与防火墙**：`release/HHZDataService Setup <版本>.exe` 安装时以管理员身份自动放行 Windows 防火墙 **TCP 8000 入站（仅专用网络）**，无需再手动关闭防火墙或执行 netsh 命令；卸载时自动移除该规则。绿色版 `HHZDataService.exe` 不含安装器放行，需手动执行 `scripts\allow-firewall.ps1` 或 netsh（见 §B2 下方说明）。安装器由 `scripts/backend-installer.nsi` + `scripts/build-backend-installer.mjs` 生成，本机需有 makensis（NSIS 编译器）：Windows 可 `winget install NSIS.NSIS`；macOS 可 `brew install nsis`；或直接复用仓库 `.electron-cache/nsis/` 与 electron-builder 系统缓存中已有的 NSIS（自动探测）。
 >
@@ -138,14 +139,14 @@ node scripts/build-backend-exe.mjs
 
 | 项 | 代码直跑（dev） | exe（Windows 主设备） |
 | --- | --- | --- |
-| 数据库 | `Workbench/data/app.db`（`.env` 可改） | `%APPDATA%\HHZ\app.db`（`entry.py` 固定） |
-| 产品图片 | `Workbench/uploads/products` | `%APPDATA%\HHZ\uploads` |
+| 数据库 | 本机 PostgreSQL（`Workbench/.env` 的 `DATABASE_URL`） | PostgreSQL（`DATABASE_URL` 环境变量，其次 `%APPDATA%\QuoteSys\database_url.txt`） |
+| 产品图片 | `Workbench/uploads/products` | `%APPDATA%\QuoteSys\uploads` |
 | 工作台静态页 | 指向仓库 `Workbench/web/dist/` | 内嵌 exe 解包目录 |
 | 监听 | `127.0.0.1:8000`（dev:server） | `0.0.0.0:8000`（局域网可达，托盘管理） |
 
-**首次部署带数据**：按 §B2 打包时已自动内嵌 `Workbench/data/app.db` 与 `Workbench/uploads/` 图片，新主设备首启会自动写入 `%APPDATA%\HHZ\`，无需再手工拷库；首启会自动建缺失表并播种默认设置，老数据不受影响。
+**首次部署带数据**：按 §B2 打包时可内嵌 `Workbench/data/seed.sql` 与 `Workbench/uploads/` 图片，新主设备首启且数据库还没有业务表时自动导入，图片写入 `%APPDATA%\QuoteSys\uploads`；已有数据的库不受影响。
 
-如需升级**已经用过的旧主设备**（目标 `%APPDATA%\HHZ\app.db` 已存在），安装包不会覆盖旧库，应通过托盘「打开数据目录」手动替换或备份恢复。
+如需升级**已经用过的旧主设备**，安装包不会覆盖既有数据库，应通过 `pg_dump` / `pg_restore` 备份恢复。
 
 ---
 
@@ -175,7 +176,7 @@ node scripts/build-backend-exe.mjs
 | `scripts/build-backend-installer.mjs` | 打包：把 `release/HHZDataService.exe` 包成 NSIS 安装版（定位 makensis + 版本号） |
 | `scripts/backend-installer.nsi` | NSIS 规格：安装时自动放行防火墙 TCP 8000（专用网络），卸载时移除 |
 | `scripts/allow-firewall.ps1` | 手工放行防火墙 TCP 8000（绿色版 exe 无安装器时使用） |
-| `Workbench/hhz-data-service.spec` | PyInstaller 规格：内嵌 `Workbench/web/dist/workbench*` + 当前库 `data/app.db`/`uploads`，产物 `HHZDataService.exe` |
-| `Workbench/app/entry.py` | exe 入口：`%APPDATA%\HHZ` 数据目录 + 首启自动导入随包初始数据 + 托盘 + `0.0.0.0:8000` |
+| `Workbench/quote-service.spec` | PyInstaller 规格：内嵌 `Workbench/web/dist/workbench*` + 可选 `data/seed.sql`/`uploads`，产物 `QuoteService.exe` |
+| `Workbench/entry.py` | exe 入口：`%APPDATA%\QuoteSys` 数据目录（uploads + 数据库连接配置）+ 首启自动导入随包 seed.sql + 托盘 + `0.0.0.0:8000` |
 | `Quote/electron/main.cjs` | 客户机壳：局域网发现主设备、图片/目录缓存、app-img 协议 |
 | `Quote/release/` | 前端构建产物（gitignore，不入库）；后端产物在根目录 `release/` |

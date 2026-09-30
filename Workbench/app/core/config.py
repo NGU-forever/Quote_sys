@@ -1,8 +1,7 @@
 """应用配置。
 
 所有可配置项均通过环境变量（或 .env 文件）注入，不硬编码敏感信息。
-数据库采用 SQLAlchemy 双引擎：默认 SQLite（现有库），
-把 DATABASE_URL 换成 postgresql+psycopg://... 即切换到 PostgreSQL。
+数据库仅支持 PostgreSQL：DATABASE_URL 必须是 postgresql+psycopg:// 连接串。
 """
 from functools import lru_cache
 
@@ -17,8 +16,8 @@ class Settings(BaseSettings):
     app_version: str = "2.0.0"
     debug: bool = False
 
-    # 数据库（SQLAlchemy 双引擎：默认 SQLite，配置 PostgreSQL 连接串即可平滑切换）
-    database_url: str = "sqlite:///./app.db"
+    # 数据库（仅 PostgreSQL，见 .env.example；生产环境务必覆盖账号密码）
+    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/quotesys_db"
 
     # Redis 缓存与分布式自增
     redis_url: str = "redis://localhost:6379/0"

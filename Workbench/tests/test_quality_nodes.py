@@ -1,13 +1,16 @@
 """仲裁、质检、自愈与状态图拓扑测试。"""
+import sys
 import unittest
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from tests import db_support  # noqa: E402  # 统一测试库连接，必须在 app.* 之前导入
+
 from langgraph.checkpoint.memory import InMemorySaver
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from app.agent.graph.builder import build_import_graph
 from app.agent.graph.nodes.quality import (
@@ -20,7 +23,6 @@ from app.agent.llm_client import LLMResponse, ToolCall
 from app.agent.mock_provider import MockProvider
 from app.agent.readers.manifest import build_manifest
 from app.core.config import settings
-from app.db.base import Base
 from app.models.device_binding import DeviceBinding  # noqa: F401
 from app.models.package import Package  # noqa: F401
 from app.models.product import Product  # noqa: F401
@@ -85,12 +87,8 @@ class StubbornInvalidProvider:
 
 
 def _db_session():
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(bind=engine)
+    engine = db_support.create_test_engine()
+    db_support.reset_schema(engine)
     return sessionmaker(bind=engine, autoflush=False, autocommit=False)()
 
 

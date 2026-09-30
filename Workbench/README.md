@@ -1,4 +1,4 @@
-﻿# HHZ 超声医疗报价平台 — FastAPI 后端
+# HHZ 超声医疗报价平台 — FastAPI 后端
 
 面向已打包分发的 App 前端的后端服务：版本检查 + 商品数据管理 + AI 价格建议（预留），
 并完整兼容现有前端工作台（登录 / 产品 / 套餐 / 目录）。
@@ -8,7 +8,8 @@
 - **FastAPI**（Web 框架）
 - **SQLAlchemy 2.x**（ORM，基于现有表结构建模）
 - **Pydantic v2**（数据校验）+ pydantic-settings（环境变量配置）
-- **PostgreSQL / SQLite 双引擎**：默认 SQLite（现有库），改 `DATABASE_URL` 即切 PostgreSQL
+- **PostgreSQL 16**（唯一数据库引擎，`postgresql+psycopg://` 连接串）
+- **LangGraph + PostgresSaver**（AI 资料导入 Agent，检查点与业务数据同库）
 - **Alembic**（仅管理新增表 / 未来字段，不修改现有表）
 - **Docker + Docker Compose + Nginx**（生产部署）
 
@@ -52,11 +53,14 @@ backend/
 ## 快速开始（开发，连接现有库）
 
 ```bash
+# 先启动 PostgreSQL（仓库根目录）
+docker compose up -d postgres
+
 cd backend
 python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\\Scripts\\activate
 pip install -r requirements.txt
 
-# 复制环境变量（默认连接 backend/data/app.db、照片目录 backend/uploads）
+# 复制环境变量（默认连接本机 5432 的 quotesys_db、照片目录 backend/uploads）
 cp .env.example .env
 
 # 启动（务必在 backend/ 目录下运行，.env 相对路径以此为基准）
@@ -72,16 +76,17 @@ uvicorn app.main:app --reload --port 8000
 > 应用启动时 `Base.metadata.create_all(checkfirst=True)` 只创建缺失的表（即 `app_versions`），
 > **不会改动**已有的 users / products / packages / device_bindings。
 
-### 用全新本地库（开箱即用，不连现有库）
+### 用全新数据库（开箱即用，不连现有库）
 
-把 `.env` 里的 `DATABASE_URL` 改成 `sqlite:///./app.db`（backend/ 根目录，无目录依赖）即可。
-此时产品/套餐为空，可在工作台新增，或用旧库备份的 `app.db` 覆盖 `backend/data/app.db`。
+新建一个空库（例如 `createdb quotesys_dev`），把 `.env` 里的 `DATABASE_URL` 指向它即可；
+应用启动时会自动建表并播种内置 admin 账号。此时产品/套餐为空，可在工作台新增，
+或用 `pg_dump` / `pg_restore` 把旧库数据导入。
 
 ## 配置（环境变量）
 
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
-| `DATABASE_URL` | `sqlite:///./app.db` | SQLAlchemy 连接串；PostgreSQL 用 `postgresql+psycopg://user:pass@host/db` |
+| `DATABASE_URL` | `postgresql+psycopg://postgres:postgres@localhost:5432/quotesys_db` | SQLAlchemy 连接串（**仅 PostgreSQL**） |
 | `AUTH_SECRET` | `hhz-workbench-local-secret` | JWT 签名密钥（生产务必修改） |
 | `TOKEN_TTL_SECONDS` | `43200` | 令牌有效期 |
 | `UPLOAD_DIR` | `./uploads` | 产品照片目录 |
@@ -162,9 +167,8 @@ docker compose up -d --build
 ```
 
 - 后端容器监听 **8000**。
-- 默认使用容器内本地 SQLite（持久化到 `backend_data` 卷）。
-- 连接现有库 / PostgreSQL：编辑 `docker-compose.yml` 的 `DATABASE_URL`（见文件内注释）。
-- `docker-compose.yml` 内附**可选**的 PostgreSQL 服务（默认注释，避免与现有库冲突）。
+- 编排内含 PostgreSQL 16 与 Redis 7 服务，`DATABASE_URL` 默认指向容器 `postgres` 服务。
+- 连接外部数据库：编辑 `docker-compose.yml` 的 `DATABASE_URL`（见文件内注释）。
 
 ### Nginx（生产反向代理 + HTTPS）
 
@@ -181,6 +185,6 @@ docker compose up -d --build
 
 ## 常见问题
 
-- **连不上数据库**：确认在 `backend/` 目录下运行，且 `.env` 里 `DATABASE_URL=sqlite:///./data/app.db`（相对 backend/）。
+- **连不上数据库**：确认 PostgreSQL 已启动（仓库根目录 `docker compose up -d postgres`），且 `.env` 里 `DATABASE_URL` 指向正确实例；容器内访问宿主库需用 `host.docker.internal`。
 - **照片 404**：确认 `.env` 里 `UPLOAD_DIR=./uploads`（backend/uploads，产品照片在 backend/uploads/products）。
-- **切 PostgreSQL**：改 `DATABASE_URL=postgresql+psycopg://user:pass@host:5432/dbname`，重启即可（需确保目标库已有相同表结构，或用 `alembic upgrade head` 补齐新增表）。
+- **换数据库**：改 `DATABASE_URL=postgresql+psycopg://user:pass@host:5432/dbname`，重启即可（空库会自动建表，或用 `alembic upgrade head` 补齐新增表）。

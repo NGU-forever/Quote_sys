@@ -1,19 +1,55 @@
 # QuoteSys 后端独立服务编排（推荐在仓库根目录使用 docker-compose.yml 启动完整集群）
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: quotesys-postgres
+    environment:
+      POSTGRES_DB: quotesys_db
+      POSTGRES_USER: quotesys_user
+      POSTGRES_PASSWORD: quotesys_secret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quotesys_user -d quotesys_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   backend:
     build: .
     container_name: quotesys-backend
     ports:
       - "8000:8000"
     environment:
-      # 默认容器内 SQLite（持久化到 backend_data 卷）
-      DATABASE_URL: sqlite:///./data/app.db
+      # PostgreSQL 唯一数据库引擎；容器内通过服务名 postgres 访问
+      DATABASE_URL: postgresql+psycopg://quotesys_user:quotesys_secret@postgres:5432/quotesys_db
+      # Redis 不可用时自动降级（单机部署可不启动 redis）
+      REDIS_URL: redis://redis:6379/0
       UPLOAD_DIR: /app/data/uploads
       AUTH_SECRET: quotesys-secret-key-production-change-me
       APP_NAME: quote-service
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
       - backend_data:/app/data
     restart: unless-stopped
 
+  redis:
+    image: redis:7-alpine
+    container_name: quotesys-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
 volumes:
+  postgres_data:
+  redis_data:
   backend_data:
