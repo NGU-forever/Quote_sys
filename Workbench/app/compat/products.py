@@ -38,15 +38,17 @@ def list_products(
     _: User = Depends(require_user),
 ):
     stmt = select(Product)
-    if category in ("device", "consumable"):
-        stmt = stmt.where(Product.category == category)
+    if category:
+        stmt = stmt.where(Product.category == category.strip())
     if keyword:
-        like = f"%{keyword}%"
+        like = f"%{keyword.strip()}%"
         stmt = stmt.where(
             or_(
                 Product.name.like(like),
                 Product.sku_id.like(like),
                 Product.applicable_devices.like(like),
+                Product.spec.like(like),
+                Product.remark.like(like),
             )
         )
     products = db.scalars(stmt.order_by(Product.sku_id.asc())).all()
@@ -83,6 +85,7 @@ async def create_product(
         remark=str(payload.get("remark") or "").strip() or None,
         image=str(payload.get("image") or "").strip() or None,
         spec=str(payload.get("spec") or "").strip() or None,
+        is_active=bool(payload["is_active"]) if "is_active" in payload else True,
     )
     db.add(product)
     db.commit()
@@ -115,6 +118,8 @@ async def update_product(
     def getv(key, fallback):
         return payload.get(key) if payload.get(key) is not None else fallback
 
+    if "category" in payload and payload.get("category"):
+        product.category = str(payload.get("category")).strip()
     product.sku_id = sku_id
     product.name = name
     product.min_price = to_number(getv("min_price", product.min_price))
@@ -129,6 +134,8 @@ async def update_product(
     product.image = str(getv("image", product.image) or "").strip() or None
     if "spec" in payload:
         product.spec = str(payload.get("spec") or "").strip() or None
+    if "is_active" in payload:
+        product.is_active = bool(payload.get("is_active"))
     db.commit()
     db.refresh(product)
     await invalidate_catalog_cache()

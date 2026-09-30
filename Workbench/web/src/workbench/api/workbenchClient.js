@@ -5,10 +5,11 @@
 // 报价版（src/quote/）与共享只读层（src/shared/）一律使用 shared/api/quoteClient.js（只读）。
 import { createHttp } from '../../shared/api/http'
 
-const TOKEN_KEY = 'hhz_workbench_token'
+const TOKEN_KEY = 'quote_workbench_token'
+const LEGACY_TOKEN_KEY = 'hhz_workbench_token'
 
 export function getToken() {
-  return localStorage.getItem(TOKEN_KEY) || ''
+  return localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY) || ''
 }
 
 export function setToken(token) {
@@ -17,6 +18,7 @@ export function setToken(token) {
 
 export function clearToken() {
   localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(LEGACY_TOKEN_KEY)
 }
 
 export function hasToken() {
@@ -33,8 +35,19 @@ export const api = {
   authStatus: () => request('/auth/status'),
   accounts: () => request('/auth/accounts'),
   resetPassword: (username, newPassword) =>
-    request('/auth/reset-password', { method: 'POST', body: JSON.stringify({ username, newPassword }) }),
+    request('/auth/reset-password', { method: 'POST', body: JSON.stringify({ username, new_password: newPassword, newPassword }) }),
   me: () => request('/auth/me'),
+  // 报价管理与详情
+  listQuotes: (params = {}) =>
+    request('/quotes' + (Object.keys(params).length ? '?' + new URLSearchParams(params).toString() : '')),
+  getQuote: (quoteNo) => request('/quotes/' + quoteNo),
+  // 员工与权限管理
+  listEmployees: (params = {}) =>
+    request('/admin/employees' + (Object.keys(params).length ? '?' + new URLSearchParams(params).toString() : '')),
+  createEmployee: (payload) =>
+    request('/admin/employees', { method: 'POST', body: JSON.stringify(payload) }),
+  updateEmployee: (id, payload) =>
+    request(`/admin/employees/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   // 公开目录/同步负载（工作台进入时也用于刷新「母版目录」，只读拉取）
   getCatalog: () => request('/catalog'),
   getSync: () => request('/sync'),

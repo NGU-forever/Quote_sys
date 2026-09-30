@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { DatabaseZap, LogOut, Package, Settings, ShieldCheck, Stethoscope } from 'lucide-vue-next'
+import { FileText, Layers, LogOut, Package, Settings, ShieldCheck, Users } from 'lucide-vue-next'
 import { useAuthStore } from '../stores/auth'
 import { api } from '../api/workbenchClient'
 import { useToast } from '../../shared/composables/useToast'
@@ -12,10 +12,10 @@ const auth = useAuthStore()
 const toast = useToast()
 
 const navItems = [
-  { to: '/workbench/devices', label: '设备管理', icon: Stethoscope },
-  { to: '/workbench/consumables', label: '耗材管理', icon: Package },
+  { to: '/workbench/products', label: '商品中心', icon: Package },
+  { to: '/workbench/quotes', label: '报价中心', icon: FileText },
+  { to: '/workbench/employees', label: '员工管理', icon: Users },
   { to: '/workbench/packages', label: '套餐管理', icon: ShieldCheck },
-  { to: '/workbench/agent', label: '数据生成', icon: DatabaseZap },
   { to: '/workbench/settings', label: '基本设置', icon: Settings }
 ]
 
@@ -49,10 +49,10 @@ function logout() {
         <div class="wb-brand-mark"><ShieldCheck :size="18" /></div>
         <div>
           <div class="wb-brand-title-row">
-            <div class="wb-brand-name">工作台</div>
+            <div class="wb-brand-name">QuoteSys</div>
             <span class="wb-version-badge">v2.0.0</span>
           </div>
-          <div class="wb-brand-sub">报价平台管理</div>
+          <div class="wb-brand-sub">商业报价管理平台</div>
         </div>
       </div>
 

@@ -85,6 +85,8 @@ def map_product(db: Session, product: Product) -> dict:
         "updated_at": product.updated_at,
         "bound_consumables": bound_consumable_skus(db, product.sku_id) if is_device else [],
         "bound_devices": bound_device_skus(db, product.sku_id) if not is_device else [],
+        "spec": product.spec,
+        "is_active": product.is_active,
     }
 
 

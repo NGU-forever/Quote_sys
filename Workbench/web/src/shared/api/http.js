@@ -5,14 +5,16 @@
 // 管理接口不存在于此文件，全部由调用方 client 组装。
 import { getApiBase } from '../utils/backendConfig'
 
-const TOKEN_KEY = 'hhz_workbench_token'
+const TOKEN_KEY = 'quote_workbench_token'
+const LEGACY_TOKEN_KEY = 'hhz_workbench_token'
 
 function getToken() {
-  return localStorage.getItem(TOKEN_KEY) || ''
+  return localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY) || ''
 }
 
 function clearToken() {
   localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(LEGACY_TOKEN_KEY)
 }
 
 function qs(params = {}) {

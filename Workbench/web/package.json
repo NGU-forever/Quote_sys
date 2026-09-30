@@ -1,9 +1,9 @@
 {
-  "name": "hhz-workbench-web",
+  "name": "quotesys-workbench-web",
   "private": true,
   "version": "2.0.0",
   "type": "module",
-  "description": "HHZ 主系统前端：工作台（管理页，由后端托管）",
+  "description": "QuoteSys 通用商业报价系统：管理工作台",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
