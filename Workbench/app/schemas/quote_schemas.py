@@ -23,8 +23,9 @@ class QuoteItemSnapshot(BaseModel):
 
 class QuoteCreate(BaseModel):
     """创建报价单请求体。"""
-    customer_name: str = Field(..., description="客户单位/名称")
+    customer_name: str = Field(..., min_length=1, description="客户单位/名称")
     customer_contact: Optional[str] = Field(None, description="客户联系人")
+
     customer_phone: Optional[str] = Field(None, description="客户联系电话")
     sales_name: Optional[str] = Field(None, description="销售人员姓名")
     sales_phone: Optional[str] = Field(None, description="销售人员电话")

@@ -11,7 +11,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(StarletteHTTPException)
     async def http_exc_handler(request: Request, exc: StarletteHTTPException):
-        return JSONResponse(status_code=exc.status_code, content={"error": str(exc.detail)})
+        msg = str(exc.detail)
+        return JSONResponse(status_code=exc.status_code, content={"error": msg, "detail": msg})
 
     @app.exception_handler(RequestValidationError)
     async def validation_exc_handler(request: Request, exc: RequestValidationError):
@@ -19,7 +20,9 @@ def register_exception_handlers(app: FastAPI) -> None:
             f"{'.'.join(str(loc) for loc in err.get('loc', []))}: {err.get('msg')}"
             for err in exc.errors()
         )
-        return JSONResponse(status_code=422, content={"error": f"参数校验失败：{details}"})
+        msg = f"参数校验失败：{details}"
+        return JSONResponse(status_code=422, content={"error": msg, "detail": msg})
+
 
     @app.exception_handler(Exception)
     async def unhandled_exc_handler(request: Request, exc: Exception):

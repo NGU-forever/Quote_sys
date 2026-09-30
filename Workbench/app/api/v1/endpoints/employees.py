@@ -123,8 +123,11 @@ def update_employee(
     if payload.role is not None:
         user.role = payload.role.strip()
     if payload.is_active is not None:
+        if user.username == RESERVED_ADMIN_USERNAME and payload.is_active is False:
+            raise HTTPException(status_code=400, detail="内置应急管理员账号不可停用")
         user.is_active = payload.is_active
     if payload.password:
+
         hashed = hash_password(payload.password)
         user.password_hash = hashed["hash"]
         user.salt = hashed["salt"]

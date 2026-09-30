@@ -183,6 +183,7 @@ class TestQuoteAPI(unittest.TestCase):
     def test_quote_no_generation_with_redis(self):
         """测试 Redis 可用时使用 INCR 生成递增单号。"""
         fake_redis = AsyncMock()
+        fake_redis.set = AsyncMock()
         fake_redis.incr = AsyncMock(side_effect=[1, 2, 3])
         fake_redis.expire = AsyncMock()
 
@@ -195,6 +196,30 @@ class TestQuoteAPI(unittest.TestCase):
 
                 no2 = asyncio.run(generate_quote_no(db))
                 self.assertEqual(no2, f"QT-{today_str}-0002")
+
+    def test_quote_no_redis_restart_collision_prevention(self):
+        """测试 Redis 重启或键丢失后，能够基于 DB 最大序号初始化 Redis 键，防止单号碰撞。"""
+        with self.Session() as db:
+            today_str = datetime.now().strftime("%Y%m%d")
+            # 数据库中已存在 0005 号单据
+            q = Quote(
+                quote_no=f"QT-{today_str}-0005",
+                customer_name="历史客户",
+                items_snapshot=[],
+            )
+            db.add(q)
+            db.commit()
+
+            fake_redis = AsyncMock()
+            fake_redis.set = AsyncMock()
+            fake_redis.incr = AsyncMock(return_value=6)
+            fake_redis.expire = AsyncMock()
+
+            with patch("app.services.quote_service.get_redis", return_value=fake_redis):
+                new_no = asyncio.run(generate_quote_no(db))
+                self.assertEqual(new_no, f"QT-{today_str}-0006")
+                fake_redis.set.assert_called_with(f"quote:seq:QT-{today_str}", 5, nx=True, ex=86400 * 2)
+
 
     # ---------- 2. 报价单创建与快照持久化 ----------
     def test_create_quote_api_authenticated(self):
@@ -381,7 +406,62 @@ class TestQuoteAPI(unittest.TestCase):
         )
         self.assertEqual(resp_404.status_code, 404)
 
+    def test_unauthenticated_quote_access(self):
+        """未携带 Token 访问报价单列表应返回 401 Unauthorized。"""
+        resp = self.client.get("/api/quotes")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_unauthenticated_quote_detail(self):
+        """未携带 Token 访问单张报价单详情应返回 401 Unauthorized。"""
+        resp = self.client.get("/api/quotes/QT-20260930-0001")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_cross_sales_quote_detail_forbidden(self):
+        """销售人员 B 访问销售人员 A 的报价单明细应返回 403 Forbidden。"""
+        with self.Session() as db:
+            q = Quote(
+                quote_no="QT-20260930-7777",
+                user_id=self.sales_user_a.id,
+                sales_name=self.sales_user_a.real_name,
+                customer_name="销售A独占客户",
+                total_list_price=8000.0,
+                final_quote_price=7500.0,
+                items_snapshot=[],
+            )
+            db.add(q)
+            db.commit()
+
+        # 销售 B 访问应该被拒绝 (403)
+        resp = self.client.get(
+            "/api/quotes/QT-20260930-7777",
+            headers={"Authorization": f"Bearer {self.sales_b_token}"},
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.assertIn("无权查看", resp.json().get("detail", ""))
+
+        # 销售 A 自身访问成功 (200)
+        resp_a = self.client.get(
+            "/api/quotes/QT-20260930-7777",
+            headers={"Authorization": f"Bearer {self.sales_a_token}"},
+        )
+        self.assertEqual(resp_a.status_code, 200)
+
+    def test_create_quote_empty_customer_name_validation(self):
+        """创建报价单时客户名称为空应触发 422 校验失败。"""
+        payload = {
+            "customer_name": "",
+            "final_quote_price": 100.0,
+            "items_snapshot": [],
+        }
+        resp = self.client.post(
+            "/api/quotes",
+            json=payload,
+            headers={"Authorization": f"Bearer {self.sales_a_token}"},
+        )
+        self.assertEqual(resp.status_code, 422)
+
     # ---------- 5. 员工管理 API ----------
+
     def test_employee_management_crud(self):
         """管理员创建员工账号与分页查询，验证密码安全脱敏。"""
         # 1. 非管理员访问应该被禁止 (403)
@@ -437,7 +517,18 @@ class TestQuoteAPI(unittest.TestCase):
             self.assertNotIn("password_hash", emp)
             self.assertNotIn("salt", emp)
 
+    def test_prevent_deactivating_reserved_admin(self):
+        """更新员工信息时尝试停用内置 admin 应急账号应返回 400。"""
+        resp = self.client.put(
+            f"/api/admin/employees/{self.admin_user.id}",
+            json={"is_active": False},
+            headers={"Authorization": f"Bearer {self.admin_token}"},
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("内置应急管理员账号不可停用", resp.json().get("detail", ""))
+
     # ---------- 6. /api/catalog Redis 缓存与通用类目 ----------
+
     def test_catalog_endpoint_with_generic_categories(self):
         """测试 /api/catalog 包含所有类目产品，支持 Redis 缓存命中与失效。"""
         resp = self.client.get("/api/catalog")

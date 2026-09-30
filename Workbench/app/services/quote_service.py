@@ -12,6 +12,7 @@ import logging
 from datetime import datetime
 from typing import Any, Optional
 
+from fastapi import HTTPException
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -23,10 +24,13 @@ from app.schemas.quote_schemas import QuoteCreate
 logger = logging.getLogger(__name__)
 
 
+
 async def generate_quote_no(db: Session, date_str: Optional[str] = None) -> str:
     """生成正式报价单号，格式：QT-YYYYMMDD-0001。
 
     优先通过 Redis INCR quote:seq:QT-YYYYMMDD 实现原子自增并设置 48 小时过期；
+    若 Redis 键未初始化或发生过服务重启/键剔除，先使用数据库当日最大序号进行原子初始化 (SET nx=True)，
+    防止单号回绕碰撞；
     若 Redis 未启动或连接失败，则安全降级为查询数据库当日已创建单号的最大序号递增。
     """
     if not date_str:
@@ -35,29 +39,31 @@ async def generate_quote_no(db: Session, date_str: Optional[str] = None) -> str:
     prefix = f"QT-{date_str}"
     redis_key = f"quote:seq:{prefix}"
 
+    # 预先查询数据库当日已有单号的最大序号，以防 Redis 重启或键丢失后回绕碰撞
+    stmt = select(Quote.quote_no).where(Quote.quote_no.like(f"{prefix}-%"))
+    existing_nos = db.scalars(stmt).all()
+    max_db_seq = 0
+    for no in existing_nos:
+        parts = no.split("-")
+        if len(parts) == 3 and parts[2].isdigit():
+            val = int(parts[2])
+            if val > max_db_seq:
+                max_db_seq = val
+
     # 1. 尝试使用 Redis 原子自增
     try:
         redis = await get_redis()
         if redis is not None:
+            # 若键不存在，以数据库当前最大序号初始化（NX=True），确保后续自增从 max_db_seq + 1 开始
+            await redis.set(redis_key, max_db_seq, nx=True, ex=86400 * 2)
             seq = await redis.incr(redis_key)
-            # 设置两天的有效期，防止长期堆积键
             await redis.expire(redis_key, 86400 * 2)
             return f"{prefix}-{seq:04d}"
     except Exception as e:
         logger.warning("Redis increment failed, falling back to DB: %s", e)
 
-    # 2. 优雅降级：基于数据库当日已有单号的最大序号生成
-    stmt = select(Quote.quote_no).where(Quote.quote_no.like(f"{prefix}-%"))
-    existing_nos = db.scalars(stmt).all()
-    max_seq = 0
-    for no in existing_nos:
-        parts = no.split("-")
-        if len(parts) == 3 and parts[2].isdigit():
-            val = int(parts[2])
-            if val > max_seq:
-                max_seq = val
-
-    next_seq = max_seq + 1
+    # 2. 优雅降级：基于数据库当日已有单号的最大序号递增
+    next_seq = max_db_seq + 1
     return f"{prefix}-{next_seq:04d}"
 
 
@@ -113,7 +119,7 @@ async def create_quote(
 
 def get_quotes(
     db: Session,
-    current_user: Optional[User] = None,
+    current_user: User,
     keyword: Optional[str] = None,
     customer: Optional[str] = None,
     status: Optional[str] = None,
@@ -123,23 +129,27 @@ def get_quotes(
 ) -> tuple[list[Quote], int]:
     """查询报价单列表。
 
+    - 必须为已登录用户；
     - 销售角色数据隔离：仅能查看当前销售员自身创建的报价单；
     - 管理员 (admin/manager) 支持查看全量报价单，并可通过 user_id 过滤特定销售；
     - 支持关键字 (keyword)、客户名 (customer)、单据状态 (status) 筛选与分页。
     """
+    if current_user is None:
+        raise HTTPException(status_code=401, detail="未登录或登录已过期")
+
     stmt = select(Quote)
 
     # 权限与数据隔离规则
-    is_admin = False
-    if current_user:
-        if current_user.role in ("admin", "manager") or current_user.username == RESERVED_ADMIN_USERNAME:
-            is_admin = True
+    is_admin = (
+        current_user.role in ("admin", "manager")
+        or current_user.username == RESERVED_ADMIN_USERNAME
+    )
 
-    if current_user and not is_admin:
+    if not is_admin:
         # 普通销售人员强制数据隔离
         stmt = stmt.where(Quote.user_id == current_user.id)
     else:
-        # 管理员或无身份上下文时，如果指定了 user_id 则过滤
+        # 管理员支持指定销售人员过滤
         if user_id is not None:
             stmt = stmt.where(Quote.user_id == user_id)
 
@@ -177,22 +187,27 @@ def get_quotes(
 def get_quote_by_no(
     db: Session,
     quote_no: str,
-    current_user: Optional[User] = None,
-) -> Optional[Quote]:
+    current_user: User,
+) -> Quote:
     """根据 quote_no 获取单张报价单明细。
 
-    若指定了普通销售员，且该单不属于当前销售员，则返回 None。
+    - 必须为已登录用户（未登录抛出 401）；
+    - 若报价单不存在，抛出 404；
+    - 若普通销售人员尝试跨销售访问他人报价单，抛出 403 异常。
     """
+    if current_user is None:
+        raise HTTPException(status_code=401, detail="未登录或登录已过期")
+
     quote = db.scalar(select(Quote).where(Quote.quote_no == quote_no))
     if not quote:
-        return None
+        raise HTTPException(status_code=404, detail="报价单不存在")
 
-    if current_user:
-        is_admin = (
-            current_user.role in ("admin", "manager")
-            or current_user.username == RESERVED_ADMIN_USERNAME
-        )
-        if not is_admin and quote.user_id != current_user.id:
-            return None
+    is_admin = (
+        current_user.role in ("admin", "manager")
+        or current_user.username == RESERVED_ADMIN_USERNAME
+    )
+    if not is_admin and quote.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="无权查看其他销售人员的报价单")
 
     return quote
+
