@@ -3,11 +3,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
-from app.services.catalog_service import build_catalog
+from app.services.catalog_service import get_cached_catalog
 
 router = APIRouter()
 
 
 @router.get("/catalog")
-def get_catalog(db: Session = Depends(get_db)):
-    return {"data": build_catalog(db)}
+async def get_catalog(db: Session = Depends(get_db)):
+    return {"data": await get_cached_catalog(db)}
+

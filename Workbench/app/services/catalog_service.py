@@ -10,13 +10,18 @@
 行为与旧工作台后端保持一致，保证旧前端无需改动即可切换。
 """
 import json
+import logging
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.redis_client import get_redis
 from app.models.device_binding import DeviceBinding
 from app.models.package import Package
 from app.models.product import Product
+
+logger = logging.getLogger(__name__)
+
 
 
 def to_number(value):
@@ -282,12 +287,13 @@ def normalize_package_body(db: Session, body: dict) -> dict:
 def build_catalog(db: Session) -> dict:
     """构建落地页报价计算器所需的目录形状（产品 + 套餐）。
 
-    产品 id 按「设备在前、耗材在后，各按 sku_id 升序」稳定生成，
+    产品 id 按「设备在前、耗材在后、其余通用商品紧随其后，各按 sku_id 升序」稳定生成，
     套餐中的 sku 引用转换为该 id，保证与前端引用自洽。
     """
     products = db.scalars(select(Product).order_by(Product.sku_id.asc())).all()
     devices = [p for p in products if p.category == "device"]
     consumables = [p for p in products if p.category == "consumable"]
+    others = [p for p in products if p.category not in ("device", "consumable")]
     product_by_sku = {p.sku_id: p for p in products}
 
     id_of: dict[str, int] = {}
@@ -298,10 +304,14 @@ def build_catalog(db: Session) -> dict:
     for p in consumables:
         id_of[p.sku_id] = next_id
         next_id += 1
+    for p in others:
+        id_of[p.sku_id] = next_id
+        next_id += 1
 
     catalog_products = []
-    for r in devices + consumables:
+    for r in devices + consumables + others:
         is_device = r.category == "device"
+        is_consumable = r.category == "consumable"
         min_price = to_number(r.min_price)
         catalog_products.append(
             {
@@ -313,22 +323,33 @@ def build_catalog(db: Session) -> dict:
                 "minPrice": min_price,
                 "maxPrice": to_number(r.max_price),
                 "unit": r.unit,
-                "bagsPerBox": to_number(r.units_per_box),
-                "piecesPerBag": to_number(r.pieces_per_unit),
+                "bagsPerBox": to_number(r.units_per_box) if to_number(r.units_per_box) is not None else 1,
+                "piecesPerBag": to_number(r.pieces_per_unit) if to_number(r.pieces_per_unit) is not None else 1,
                 "image": r.image or "",
                 "boundConsumables": (
                     [id_of[s] for s in bound_consumable_skus(db, r.sku_id) if s in id_of]
                     if is_device
                     else []
                 ),
-                "spec": "医用级治疗设备" if is_device else "医用级耗材",
-                "power": "临床治疗" if is_device else "医用级耗材",
+                "spec": r.spec or ("医用级治疗设备" if is_device else ("医用级耗材" if is_consumable else "标准规格")),
+                "power": r.spec or ("临床治疗" if is_device else ("医用级耗材" if is_consumable else "通用产品")),
                 "desc": (
-                    "适用于各级医疗机构的康复理疗、疼痛管理与临床治疗场景。"
-                    if is_device
-                    else "适配相应治疗设备的一次性医用耗材，采用医用级材质。"
+                    r.remark
+                    or (
+                        "适用于各级医疗机构的康复理疗、疼痛管理与临床治疗场景。"
+                        if is_device
+                        else (
+                            "适配相应治疗设备的一次性医用耗材，采用医用级材质。"
+                            if is_consumable
+                            else (r.name or "")
+                        )
+                    )
                 ),
-                "tags": ["治疗设备", "价格表"] if is_device else ["医用耗材", "价格表"],
+                "tags": (
+                    ["治疗设备", "价格表"]
+                    if is_device
+                    else (["医用耗材", "价格表"] if is_consumable else [r.category, "价格表"])
+                ),
                 "plan2Price": None,
                 "tiers": [],
             }
@@ -387,3 +408,47 @@ def build_catalog(db: Session) -> dict:
         )
 
     return {"products": catalog_products, "packages": packages}
+
+
+# ---------- Redis 缓存管理 ----------
+
+CATALOG_CACHE_KEY = "quote:catalog:data"
+CATALOG_CACHE_TTL = 3600
+
+
+async def get_cached_catalog(db: Session) -> dict:
+    """获取产品与套餐目录。
+
+    优先从 Redis 键 quote:catalog:data 读取（TTL 3600 秒）；
+    若未命中或 Redis 服务不可用，则安全降级走数据库构建并异步回写缓存。
+    """
+    redis = None
+    try:
+        redis = await get_redis()
+        if redis is not None:
+            cached = await redis.get(CATALOG_CACHE_KEY)
+            if cached:
+                return json.loads(cached)
+    except Exception as e:
+        logger.warning("Error reading catalog cache from Redis: %s", e)
+
+    data = build_catalog(db)
+
+    try:
+        if redis is not None:
+            await redis.set(CATALOG_CACHE_KEY, json.dumps(data, ensure_ascii=False), ex=CATALOG_CACHE_TTL)
+    except Exception as e:
+        logger.warning("Error writing catalog cache to Redis: %s", e)
+
+    return data
+
+
+async def invalidate_catalog_cache() -> None:
+    """主动使目录缓存失效（在商品、套餐或绑定增删改后调用）。"""
+    try:
+        redis = await get_redis()
+        if redis is not None:
+            await redis.delete(CATALOG_CACHE_KEY)
+    except Exception as e:
+        logger.warning("Error invalidating catalog cache in Redis: %s", e)
+

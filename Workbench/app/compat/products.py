@@ -18,10 +18,12 @@ from app.models.user import User
 from app.services.catalog_service import (
     bound_consumable_skus,
     bound_device_skus,
+    invalidate_catalog_cache,
     map_product,
     next_sku_id,
     to_number,
 )
+
 
 router = APIRouter(prefix="/products")
 
@@ -52,12 +54,12 @@ def list_products(
 
 
 @router.post("", status_code=201)
-def create_product(
+async def create_product(
     payload: dict = Body(...),
     db: Session = Depends(get_db),
     _: User = Depends(require_user),
 ):
-    category = "device" if payload.get("category") == "device" else "consumable"
+    category = str(payload.get("category") or "consumable").strip()
     name = str(payload.get("name") or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="产品名称不能为空")
@@ -80,15 +82,17 @@ def create_product(
         raw_price_desc=str(payload.get("raw_price_desc") or "").strip() or None,
         remark=str(payload.get("remark") or "").strip() or None,
         image=str(payload.get("image") or "").strip() or None,
+        spec=str(payload.get("spec") or "").strip() or None,
     )
     db.add(product)
     db.commit()
     db.refresh(product)
+    await invalidate_catalog_cache()
     return {"data": map_product(db, product)}
 
 
 @router.put("/{product_id}")
-def update_product(
+async def update_product(
     product_id: int,
     payload: dict = Body(...),
     db: Session = Depends(get_db),
@@ -123,13 +127,16 @@ def update_product(
     product.raw_price_desc = str(getv("raw_price_desc", product.raw_price_desc) or "").strip() or None
     product.remark = str(getv("remark", product.remark) or "").strip() or None
     product.image = str(getv("image", product.image) or "").strip() or None
+    if "spec" in payload:
+        product.spec = str(payload.get("spec") or "").strip() or None
     db.commit()
     db.refresh(product)
+    await invalidate_catalog_cache()
     return {"data": map_product(db, product)}
 
 
 @router.delete("/{product_id}")
-def delete_product(
+async def delete_product(
     product_id: int,
     db: Session = Depends(get_db),
     _: User = Depends(require_user),
@@ -148,11 +155,12 @@ def delete_product(
         )
     )
     db.commit()
+    await invalidate_catalog_cache()
     return {"ok": True}
 
 
 @router.put("/{product_id}/bindings")
-def update_bindings(
+async def update_bindings(
     product_id: int,
     payload: dict = Body(...),
     db: Session = Depends(get_db),
@@ -197,6 +205,7 @@ def update_bindings(
             )
         )
     db.commit()
+    await invalidate_catalog_cache()
 
     return {
         "data": {
@@ -235,4 +244,6 @@ async def upload_photo(
     product.updated_at = now_str()
     db.commit()
     db.refresh(product)
+    await invalidate_catalog_cache()
     return {"data": map_product(db, product)}
+

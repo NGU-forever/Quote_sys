@@ -9,6 +9,7 @@ from app.core.deps import get_db, require_user
 from app.models.package import Package
 from app.models.user import User
 from app.services.catalog_service import (
+    invalidate_catalog_cache,
     map_package,
     next_package_id,
     normalize_package_body,
@@ -25,7 +26,8 @@ def list_packages(db: Session = Depends(get_db), _: User = Depends(require_user)
 
 
 @router.post("", status_code=201)
-def create_package(
+async def create_package(
+
     payload: dict = Body(...),
     db: Session = Depends(get_db),
     _: User = Depends(require_user),
@@ -61,11 +63,12 @@ def create_package(
     db.add(pkg)
     db.commit()
     db.refresh(pkg)
+    await invalidate_catalog_cache()
     return {"data": map_package(pkg)}
 
 
 @router.put("/{package_id}")
-def update_package(
+async def update_package(
     package_id: int,
     payload: dict = Body(...),
     db: Session = Depends(get_db),
@@ -105,11 +108,12 @@ def update_package(
     existing.note = body["note"]
     db.commit()
     db.refresh(existing)
+    await invalidate_catalog_cache()
     return {"data": map_package(existing)}
 
 
 @router.delete("/{package_id}")
-def delete_package(
+async def delete_package(
     package_id: int,
     db: Session = Depends(get_db),
     _: User = Depends(require_user),
@@ -119,4 +123,6 @@ def delete_package(
         raise HTTPException(status_code=404, detail="套餐不存在")
     db.delete(pkg)
     db.commit()
+    await invalidate_catalog_cache()
     return {"ok": True}
+
