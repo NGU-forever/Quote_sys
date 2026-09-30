@@ -46,7 +46,7 @@ const bindingSearch = ref('')
 // 分类预设配置
 const CATEGORY_TABS = [
   { key: 'all', label: '全部' },
-  { key: 'hardware', label: '硬件设备' },
+  { key: 'device', label: '硬件设备' },
   { key: 'consumable', label: '耗材消耗品' },
   { key: 'accessory', label: '配套配件' },
   { key: 'service', label: '定制服务' },
@@ -54,7 +54,7 @@ const CATEGORY_TABS = [
 ]
 
 const CATEGORY_PRESETS = [
-  { value: 'hardware', label: '硬件设备' },
+  { value: 'device', label: '硬件设备' },
   { value: 'consumable', label: '耗材消耗品' },
   { value: 'accessory', label: '配套配件' },
   { value: 'service', label: '定制服务' },
@@ -70,7 +70,7 @@ const customCategoryInput = ref('')
 const form = reactive({
   name: '',
   sku_id: '',
-  category: 'hardware',
+  category: 'device',
   spec: '',
   unit: '台',
   min_price: '',
@@ -90,9 +90,9 @@ function resetForm() {
   customCategoryInput.value = ''
   
   // 根据当前激活的 tab 默认选择分类
-  let defaultCategory = 'hardware'
-  if (['hardware', 'consumable', 'accessory', 'service'].includes(activeCategoryTab.value)) {
-    defaultCategory = activeCategoryTab.value
+  let defaultCategory = 'device'
+  if (['device', 'hardware', 'consumable', 'accessory', 'service'].includes(activeCategoryTab.value)) {
+    defaultCategory = activeCategoryTab.value === 'hardware' ? 'device' : activeCategoryTab.value
   }
 
   let defaultUnit = '台'
@@ -122,19 +122,19 @@ function resetForm() {
 function matchesCategory(productCategory, tabKey) {
   const cat = (productCategory || '').toLowerCase().trim()
   if (tabKey === 'all') return true
-  if (tabKey === 'hardware') return cat === 'hardware' || cat === 'device'
-  if (tabKey === 'consumable') return cat === 'consumable' || cat === 'consumables'
-  if (tabKey === 'accessory') return cat === 'accessory' || cat === 'accessories'
-  if (tabKey === 'service') return cat === 'service' || cat === 'services'
+  if (tabKey === 'device' || tabKey === 'hardware') return cat === 'device' || cat === 'hardware'
+  if (tabKey === 'consumable' || tabKey === 'consumables') return cat === 'consumable' || cat === 'consumables'
+  if (tabKey === 'accessory' || tabKey === 'accessories') return cat === 'accessory' || cat === 'accessories'
+  if (tabKey === 'service' || tabKey === 'services') return cat === 'service' || cat === 'services'
   if (tabKey === 'other') {
-    return !['hardware', 'device', 'consumable', 'consumables', 'accessory', 'accessories', 'service', 'services'].includes(cat)
+    return !['device', 'hardware', 'consumable', 'consumables', 'accessory', 'accessories', 'service', 'services'].includes(cat)
   }
   return cat === tabKey
 }
 
 function getCategoryBadge(catRaw) {
   const cat = (catRaw || '').toLowerCase().trim()
-  if (cat === 'hardware' || cat === 'device') return { label: '硬件设备', class: 'cat-hardware' }
+  if (cat === 'device' || cat === 'hardware') return { label: '硬件设备', class: 'cat-hardware' }
   if (cat === 'consumable' || cat === 'consumables') return { label: '耗材消耗品', class: 'cat-consumable' }
   if (cat === 'accessory' || cat === 'accessories') return { label: '配套配件', class: 'cat-accessory' }
   if (cat === 'service' || cat === 'services') return { label: '定制服务', class: 'cat-service' }
@@ -197,8 +197,10 @@ function openCreate() {
 
 function openEdit(item) {
   editingId.value = item.id
-  const cat = item.category || 'hardware'
-  const isPreset = ['hardware', 'consumable', 'accessory', 'service'].includes(cat)
+  let cat = item.category || 'device'
+  if (cat === 'hardware') cat = 'device'
+  if (cat === 'consumables') cat = 'consumable'
+  const isPreset = ['device', 'consumable', 'accessory', 'service'].includes(cat)
 
   isCustomCategory.value = !isPreset
   customCategoryInput.value = isPreset ? '' : cat

@@ -122,6 +122,7 @@ def get_quotes(
     current_user: User,
     keyword: Optional[str] = None,
     customer: Optional[str] = None,
+    sales_person: Optional[str] = None,
     status: Optional[str] = None,
     user_id: Optional[int] = None,
     page: int = 1,
@@ -132,7 +133,7 @@ def get_quotes(
     - 必须为已登录用户；
     - 销售角色数据隔离：仅能查看当前销售员自身创建的报价单；
     - 管理员 (admin/manager) 支持查看全量报价单，并可通过 user_id 过滤特定销售；
-    - 支持关键字 (keyword)、客户名 (customer)、单据状态 (status) 筛选与分页。
+    - 支持关键字 (keyword)、客户名 (customer)、销售人 (sales_person)、单据状态 (status) 筛选与分页。
     """
     if current_user is None:
         raise HTTPException(status_code=401, detail="未登录或登录已过期")
@@ -168,6 +169,15 @@ def get_quotes(
 
     if customer:
         stmt = stmt.where(Quote.customer_name.like(f"%{customer.strip()}%"))
+
+    if sales_person:
+        sp = f"%{sales_person.strip()}%"
+        stmt = stmt.where(
+            or_(
+                Quote.sales_name.like(sp),
+                Quote.sales_phone.like(sp),
+            )
+        )
 
     if status:
         stmt = stmt.where(Quote.status == status.strip())

@@ -369,6 +369,16 @@ class TestQuoteAPI(unittest.TestCase):
         data_status = resp_status.json()
         self.assertEqual(data_status["total"], 2)
 
+        # 6. 管理员按 sales_person 筛选
+        resp_sales = self.client.get(
+            "/api/quotes?sales_person=销售员B",
+            headers={"Authorization": f"Bearer {self.admin_token}"},
+        )
+        self.assertEqual(resp_sales.status_code, 200)
+        data_sales = resp_sales.json()
+        self.assertEqual(data_sales["total"], 1)
+        self.assertEqual(data_sales["items"][0]["sales_name"], "销售员B")
+
     # ---------- 4. 单张报价单明细查询 ----------
     def test_get_quote_by_quote_no(self):
         """测试根据 quote_no 调取单张报价单明细快照。"""

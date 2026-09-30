@@ -65,7 +65,7 @@ def bound_device_skus(db: Session, consumable_sku_id: str) -> list[str]:
 
 def map_product(db: Session, product: Product) -> dict:
     """序列化产品，附带设备-耗材绑定（双向）。"""
-    is_device = product.category == "device"
+    is_device = product.category in ("device", "hardware")
     return {
         "id": product.id,
         "sku_id": product.sku_id,
@@ -119,7 +119,7 @@ def map_package(pkg: Package) -> dict:
 
 def next_sku_id(db: Session, category: str) -> str:
     """按类别生成下一个 sku_id（P/C + 三位序号）。"""
-    prefix = "P" if category == "device" else "C"
+    prefix = "P" if category in ("device", "hardware") else "C"
     last = db.scalars(
         select(Product.sku_id)
         .where(Product.category == category, Product.sku_id.like(f"{prefix}%"))
@@ -174,7 +174,7 @@ def derive_package_quote_fields(
         qty = int(quantities[i]) if i < len(quantities) and quantities[i] is not None else 0
         if product is None:
             continue
-        if product.category == "device":
+        if product.category in ("device", "hardware"):
             if fixed_bundle:
                 device_qty = (device_qty or 0) + (qty or 1)
             elif device_qty is None:
@@ -293,9 +293,9 @@ def build_catalog(db: Session) -> dict:
     套餐中的 sku 引用转换为该 id，保证与前端引用自洽。
     """
     products = db.scalars(select(Product).order_by(Product.sku_id.asc())).all()
-    devices = [p for p in products if p.category == "device"]
-    consumables = [p for p in products if p.category == "consumable"]
-    others = [p for p in products if p.category not in ("device", "consumable")]
+    devices = [p for p in products if p.category in ("device", "hardware")]
+    consumables = [p for p in products if p.category in ("consumable", "consumables")]
+    others = [p for p in products if p.category not in ("device", "hardware", "consumable", "consumables")]
     product_by_sku = {p.sku_id: p for p in products}
 
     id_of: dict[str, int] = {}
@@ -312,8 +312,8 @@ def build_catalog(db: Session) -> dict:
 
     catalog_products = []
     for r in devices + consumables + others:
-        is_device = r.category == "device"
-        is_consumable = r.category == "consumable"
+        is_device = r.category in ("device", "hardware")
+        is_consumable = r.category in ("consumable", "consumables")
         min_price = to_number(r.min_price)
         catalog_products.append(
             {

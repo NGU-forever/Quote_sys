@@ -45,7 +45,7 @@ const skuNameMap = computed(() => {
 const deviceBindings = computed(() => {
   const map = {}
   products.value.forEach((p) => {
-    if (p.category === 'device') map[p.sku_id] = p.bound_consumables || []
+    if (p.category === 'device' || p.category === 'hardware') map[p.sku_id] = p.bound_consumables || []
   })
   return map
 })
@@ -55,7 +55,7 @@ const selectedDeviceSkus = computed(() =>
   items.value
     .filter((r) => {
       const p = products.value.find((x) => x.sku_id === r.sku_id)
-      return p?.category === 'device'
+      return p?.category === 'device' || p?.category === 'hardware'
     })
     .map((r) => r.sku_id)
 )
@@ -81,7 +81,7 @@ const restricted = computed(
 
 /** 耗材下拉选项：受限时仅显示绑定并集；同时保留已选中但已失配的项（编辑历史套餐时避免选项丢失） */
 const consumableOptions = computed(() => {
-  const all = products.value.filter((x) => x.category === 'consumable')
+  const all = products.value.filter((x) => x.category === 'consumable' || x.category === 'consumables')
   const allowed = allowedConsumableSkus.value
   if (!allowed) return all
   const selected = new Set(items.value.filter((r) => r.sku_id).map((r) => r.sku_id))
@@ -98,7 +98,7 @@ function onSkuChange() {
   if (!allowed) return
   items.value.forEach((r) => {
     const p = products.value.find((x) => x.sku_id === r.sku_id)
-    if (p?.category === 'consumable' && r.sku_id && !allowed.includes(r.sku_id)) {
+    if ((p?.category === 'consumable' || p?.category === 'consumables') && r.sku_id && !allowed.includes(r.sku_id)) {
       r.sku_id = ''
     }
   })
@@ -191,7 +191,7 @@ function derivePackageParams() {
     const p = products.value.find((x) => x.sku_id === row.sku_id)
     const qty = row.quantity === '' ? null : Number(row.quantity)
     if (!p) continue
-    if (p.category === 'device') {
+    if (p.category === 'device' || p.category === 'hardware') {
       if (fixedBundle) {
         deviceQty = (deviceQty === '' ? 0 : deviceQty) + (qty ?? 1)
       } else if (deviceQty === '') {
@@ -420,7 +420,7 @@ onMounted(load)
                 <option value="" disabled>选择 SKU</option>
                 <optgroup label="设备">
                   <option
-                    v-for="p in products.filter((x) => x.category === 'device')"
+                    v-for="p in products.filter((x) => x.category === 'device' || x.category === 'hardware')"
                     :key="p.sku_id"
                     :value="p.sku_id"
                   >

@@ -177,9 +177,9 @@ async def update_bindings(
     if product is None:
         raise HTTPException(status_code=404, detail="产品不存在")
 
-    is_device = product.category == "device"
+    is_device = product.category in ("device", "hardware")
     field = "consumable_sku_ids" if is_device else "device_sku_ids"
-    target_category = "consumable" if is_device else "device"
+    target_categories = ("consumable", "consumables") if is_device else ("device", "hardware")
 
     raw = payload.get(field) if isinstance(payload, dict) else None
     requested = (
@@ -192,7 +192,7 @@ async def update_bindings(
         valid = set(
             db.scalars(
                 select(Product.sku_id).where(
-                    Product.category == target_category,
+                    Product.category.in_(target_categories),
                     Product.sku_id.in_(requested),
                 )
             ).all()

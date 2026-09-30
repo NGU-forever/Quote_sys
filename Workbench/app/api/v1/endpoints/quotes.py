@@ -51,6 +51,7 @@ async def create_quote(
 def list_quotes(
     keyword: Optional[str] = Query(None, description="搜索关键字（单号/客户/销售/联系人/备注）"),
     customer: Optional[str] = Query(None, description="客户名称模糊匹配"),
+    sales_person: Optional[str] = Query(None, description="销售人员姓名或手机模糊匹配"),
     status: Optional[str] = Query(None, description="单据状态筛选"),
     user_id: Optional[int] = Query(None, description="销售人员用户 ID（仅管理员可用）"),
     page: int = Query(1, ge=1, description="当前页码"),
@@ -64,6 +65,7 @@ def list_quotes(
         current_user=current_user,
         keyword=keyword,
         customer=customer,
+        sales_person=sales_person,
         status=status,
         user_id=user_id,
         page=page,

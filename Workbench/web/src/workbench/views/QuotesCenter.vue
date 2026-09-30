@@ -82,6 +82,25 @@ const stats = computed(() => {
   }
 })
 
+const totalPages = computed(() => {
+  if (!totalCount.value) return 1
+  return Math.ceil(totalCount.value / pageSize.value) || 1
+})
+
+function prevPage() {
+  if (page.value > 1 && !loading.value) {
+    page.value--
+    loadQuotes()
+  }
+}
+
+function nextPage() {
+  if (page.value < totalPages.value && !loading.value) {
+    page.value++
+    loadQuotes()
+  }
+}
+
 // 加载报价列表
 async function loadQuotes() {
   loading.value = true
@@ -92,6 +111,7 @@ async function loadQuotes() {
     }
     if (filters.keyword.trim()) params.keyword = filters.keyword.trim()
     if (filters.customer.trim()) params.customer = filters.customer.trim()
+    if (filters.salesPerson.trim()) params.sales_person = filters.salesPerson.trim()
     if (filters.status !== 'all') params.status = filters.status
 
     const res = await api.listQuotes(params)
@@ -118,16 +138,7 @@ function resetSearch() {
   loadQuotes()
 }
 
-// 本地进一步根据销售人姓名过滤（若后端未单独过滤 salesPerson）
-const displayQuotes = computed(() => {
-  if (!filters.salesPerson.trim()) return quotes.value
-  const sp = filters.salesPerson.trim().toLowerCase()
-  return quotes.value.filter((q) => {
-    const sName = (q.sales_name || '').toLowerCase()
-    const sPhone = (q.sales_phone || '').toLowerCase()
-    return sName.includes(sp) || sPhone.includes(sp)
-  })
-})
+const displayQuotes = computed(() => quotes.value)
 
 // 查看报价详情
 async function openDetail(quote) {
@@ -430,6 +441,34 @@ onMounted(loadQuotes)
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- 分页控制器 -->
+    <div class="wb-pagination-bar">
+      <div class="wb-pagination-info">
+        共 <span class="wb-page-highlight">{{ totalCount }}</span> 条报价单，当前第 {{ page }} / {{ totalPages }} 页
+      </div>
+      <div class="wb-pagination-controls">
+        <button
+          class="wb-page-btn"
+          :disabled="page <= 1 || loading"
+          title="上一页"
+          @click="prevPage"
+        >
+          <ChevronLeft :size="15" />
+          <span>上一页</span>
+        </button>
+        <span class="wb-page-current">{{ page }}</span>
+        <button
+          class="wb-page-btn"
+          :disabled="page >= totalPages || loading"
+          title="下一页"
+          @click="nextPage"
+        >
+          <span>下一页</span>
+          <ChevronRight :size="15" />
+        </button>
+      </div>
     </div>
 
     <!-- 报价详情模态弹窗 -->
@@ -1242,5 +1281,72 @@ onMounted(loadQuotes)
   .wb-filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* 分页条样式 */
+.wb-pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.wb-pagination-info {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.wb-page-highlight {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.wb-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wb-page-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wb-page-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--bg-alt);
+}
+
+.wb-page-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.wb-page-current {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  font-size: 13px;
+  font-weight: 700;
 }
 </style>
