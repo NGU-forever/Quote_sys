@@ -1,0 +1,74 @@
+{
+  "name": "hhz-ultrasound-quote-platform",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "description": "超声医疗报价平台桌面安装版",
+  "author": "HHZ",
+  "scripts": {
+    "dev": "concurrently -k -n server,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:web": "vite",
+    "dev:server": "node ../scripts/serve-backend.mjs --reload",
+    "server": "node ../scripts/serve-backend.mjs",
+    "dev:desktop": "node ../scripts/dev.mjs",
+    "dev:desktop:all": "concurrently -k -n server,desktop -c blue,green \"npm:dev:server\" \"node ../scripts/dev.mjs\"",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --fix",
+    "format": "prettier --write .",
+    "desktop": "vite build && electron .",
+    "build:desktop": "vite build && electron-builder",
+    "build:win": "vite build && electron-builder --win --x64"
+  },
+  "dependencies": {
+    "lucide-vue-next": "^0.468.0",
+    "pinia": "^2.2.6",
+    "vue": "^3.5.13",
+    "vue-router": "^4.4.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "concurrently": "^9.2.4",
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3",
+    "eslint": "^10.8.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-vue": "^10.10.0",
+    "globals": "^17.11.0",
+    "prettier": "^3.9.6",
+    "vite": "^5.4.11"
+  },
+  "build": {
+    "appId": "com.ultrasound.quote",
+    "productName": "超声医疗报价平台",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "allowScripts": {
+    "electron@31.7.7": true,
+    "esbuild@0.21.5": true,
+    "fsevents@2.3.3": true,
+    "vue-demi@0.14.10": true
+  }
+}

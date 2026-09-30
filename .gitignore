@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+
+# Builds & Outputs
+dist/
+release/
+*.exe
+*.zip
+
+# Database & Runtime Data
+*.db
+*.db-journal
+*.sqlite3
+data/*.db
+data/*.sqlite3
+quotesys_pgdata/
+quotesys_redisdata/
+uploads/products/*
+!uploads/products/.gitkeep
+
+# Environment & IDE
+.env
+.DS_Store
+*.log
+.vscode/
+.idea/

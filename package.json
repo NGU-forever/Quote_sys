@@ -1,0 +1,23 @@
+{
+  "name": "quote-sys-root",
+  "version": "2.0.0",
+  "private": true,
+  "description": "QuoteSys 通用商业报价系统工程根目录",
+  "scripts": {
+    "dev": "concurrently -k -n backend,quote -c blue,green \"npm run dev:backend\" \"npm run dev:quote\"",
+    "dev:backend": "node scripts/serve-backend.mjs --reload",
+    "dev:quote": "cd Quote && npm run dev",
+    "dev:desktop": "cd Quote && npm run dev:desktop",
+    "dev:workbench": "cd Workbench/web && npm run dev",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "build:client": "cd Quote && npm run build:win",
+    "build:workbench": "cd Workbench/web && npm run build",
+    "build:backend": "node scripts/build-backend-exe.mjs",
+    "clean": "node -e \"const fs=require('fs'); ['Quote/dist','Quote/release','Workbench/web/dist','Workbench/dist'].forEach(d => fs.existsSync(d) && fs.rmSync(d, {recursive:true,force:true})); console.log('Cleaned build artifacts.');\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.4"
+  }
+}
