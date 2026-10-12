@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.agent import router as agent_router
+from app.api.designer import router as designer_router
 from app.compat.router import compat_router
 from app.core.config import settings
 from app.core.handlers import register_exception_handlers
@@ -50,6 +51,7 @@ register_exception_handlers(app)
 
 app.include_router(compat_router)
 app.include_router(agent_router, prefix="/api", tags=["agent"])
+app.include_router(designer_router)
 
 # 产品照片静态访问（公开）
 app.mount(
