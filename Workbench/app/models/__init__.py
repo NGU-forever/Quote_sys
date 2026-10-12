@@ -13,6 +13,13 @@ from app.models.llm_call import LlmCall
 from app.models.package import Package
 from app.models.product import Product
 from app.models.quote import Quote
+from app.models.ui_designer import (
+    UiSignalSnapshot,
+    UiSpec,
+    UiSpecDraft,
+    UiSpecRevision,
+    UiStylePreset,
+)
 from app.models.user import User
 
 __all__ = [
@@ -26,4 +33,9 @@ __all__ = [
     "ImportRun",
     "ImportRunEvent",
     "LlmCall",
+    "UiSpecDraft",
+    "UiSpec",
+    "UiSignalSnapshot",
+    "UiStylePreset",
+    "UiSpecRevision",
 ]
