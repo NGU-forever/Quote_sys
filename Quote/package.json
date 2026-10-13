@@ -19,7 +19,8 @@
     "format": "prettier --write .",
     "desktop": "vite build && electron .",
     "build:desktop": "vite build && electron-builder",
-    "build:win": "vite build && electron-builder --win --x64"
+    "build:win": "vite build && electron-builder --win --x64",
+    "test": "node --test 'src/**/__tests__/**/*.test.js'"
   },
   "dependencies": {
     "lucide-vue-next": "^0.468.0",
