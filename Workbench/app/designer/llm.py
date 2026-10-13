@@ -16,8 +16,18 @@ from app.designer.validator import validate_and_repair_spec
 
 MAX_ATTEMPTS = 3
 
-# 触发重试的校验问题特征（良性修复如"缺少 spec_version"不重试）
-_VIOLATION_MARKERS = ("字段门", "结构门")
+# 触发重试的校验问题特征：只认"模型提案被拒绝"，
+# 良性修复（如"缺少 screens 已回退默认"）不应触发重试。
+_VIOLATION_MARKERS = (
+    "非法字段",
+    "过滤后为空",
+    "不在骨架",
+    "未知 Block",
+    "非法模块",
+    "非法骨架",
+    "非法 preset_id",
+    "非法 density",
+)
 
 
 ENRICHMENT_TOOL = {
@@ -101,9 +111,7 @@ def is_violation(issue: str) -> bool:
     """判断该问题是否属于"模型提案被门禁拒绝"（需要回传重试）。"""
     if not isinstance(issue, str):
         return False
-    if any(marker in issue for marker in _VIOLATION_MARKERS):
-        return True
-    return "枚举门" in issue and "非法" in issue
+    return any(marker in issue for marker in _VIOLATION_MARKERS)
 
 
 def merge_enrichment(spec: dict, payload: dict) -> dict:
