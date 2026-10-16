@@ -3,6 +3,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import WorkbenchApp from './App.vue'
 import router from './router'
+import '../shared/assets/tailwind.css'
 import '../shared/assets/main.css'
 
 createApp(WorkbenchApp).use(createPinia()).use(router).mount('#app')

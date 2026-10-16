@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { FileText, Layers, LogOut, Package, Settings, ShieldCheck, Users } from 'lucide-vue-next'
+import { FileText, LogOut, Package, Palette, Settings, ShieldCheck, Users } from 'lucide-vue-next'
 import { useAuthStore } from '../stores/auth'
 import { api } from '../api/workbenchClient'
 import { useToast } from '../../shared/composables/useToast'
@@ -16,6 +16,7 @@ const navItems = [
   { to: '/workbench/quotes', label: '报价中心', icon: FileText },
   { to: '/workbench/employees', label: '员工管理', icon: Users },
   { to: '/workbench/packages', label: '套餐管理', icon: ShieldCheck },
+  { to: '/workbench/designer', label: '系统设计', icon: Palette },
   { to: '/workbench/settings', label: '基本设置', icon: Settings }
 ]
 

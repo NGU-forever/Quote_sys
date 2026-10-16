@@ -49,6 +49,12 @@ const router = createRouter({
           meta: { title: '数据生成', requiresAuth: true }
         },
         {
+          path: 'designer',
+          name: 'workbench-designer',
+          component: () => import('../designer/DesignerContainer.vue'),
+          meta: { title: '系统设计', requiresAuth: true }
+        },
+        {
           path: 'settings',
           name: 'workbench-settings',
           component: () => import('./views/SettingsManager.vue'),
