@@ -1,0 +1,28 @@
+/* 黄金屏渲染专用样式（不影响业务界面） */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Arial,
+    sans-serif;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+/*
+ * print=1：独立挂载打印区（PrintHarness），页面上只有打印内容。
+ * QuotePrintArea 默认 display:none（屏幕态隐藏），这里强制显示以便截图。
+ */
+.visual-print-mode .quote-print-area {
+  display: block !important;
+  visibility: visible !important;
+}
+
+.visual-print-mode .qs-print-standalone {
+  padding: 16px;
+  background: #ffffff;
+}

@@ -13,6 +13,9 @@ release/
 *.zip
 # Agent 评测产物（本地指标报告，不入库）
 Workbench/eval/report-*.json
+# 黄金屏：构建产物与本次渲染（基准图 Quote/visual/baseline/ 需要入库）
+Quote/visual-dist/
+Quote/visual/current/
 
 # Database & Runtime Data
 quotesys_pgdata/
