@@ -2,18 +2,14 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import {
   Check,
-  Eye,
   ImagePlus,
-  Layers,
   Link2,
   Package,
   Pencil,
   Plus,
   RefreshCw,
   Search,
-  Tag,
-  Trash2,
-  X
+  Trash2
 } from 'lucide-vue-next'
 import WbModal from '../components/WbModal.vue'
 import { api } from '../api/workbenchClient'

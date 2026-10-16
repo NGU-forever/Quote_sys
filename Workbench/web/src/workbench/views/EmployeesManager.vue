@@ -1,22 +1,15 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import {
-  Check,
-  Edit2,
   KeyRound,
-  Lock,
   Pencil,
-  Phone,
-  Plus,
   RefreshCw,
   Search,
   Shield,
   ShieldAlert,
   ShieldCheck,
-  UserCheck,
   UserPlus,
-  Users,
-  UserX
+  Users
 } from 'lucide-vue-next'
 import WbModal from '../components/WbModal.vue'
 import { api } from '../api/workbenchClient'

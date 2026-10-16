@@ -11,15 +11,11 @@ import {
   Eye,
   FileSpreadsheet,
   FileText,
-  Filter,
   Layers,
   Phone,
-  Printer,
   RefreshCw,
   Search,
-  Tag,
-  User,
-  XCircle
+  User
 } from 'lucide-vue-next'
 import WbModal from '../components/WbModal.vue'
 import { api } from '../api/workbenchClient'
@@ -189,11 +185,6 @@ const snapshotItems = computed(() => {
     return []
   }
 })
-
-// 打印简易处理
-function printQuote() {
-  window.print()
-}
 
 onMounted(loadQuotes)
 </script>
