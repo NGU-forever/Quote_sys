@@ -1,6 +1,5 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { useCatalogStore } from '../../shared/stores/catalog'
 import { getApiBase } from '../../shared/utils/backendConfig'
 import SiteHeader from '../components/SiteHeader.vue'
@@ -8,7 +7,6 @@ import QuoteSection from '../components/QuoteSection.vue'
 import ThemeProvider from '../../renderer/tokens/ThemeProvider.vue'
 import LayoutEngine from '../../renderer/LayoutEngine.vue'
 
-const router = useRouter()
 const catalog = useCatalogStore()
 
 const activeSpec = ref(null)
@@ -34,10 +32,6 @@ function toggleView() {
   useClassicView.value = !useClassicView.value
 }
 
-function goToDesigner() {
-  router.push('/designer')
-}
-
 onMounted(() => {
   catalog.hydrateFromRemote()
   checkActiveSpec()
@@ -60,7 +54,6 @@ onMounted(() => {
           </div>
           <div class="banner-actions">
             <button class="btn-text" @click="toggleView">切换至经典计算器</button>
-            <button class="btn-outline" @click="goToDesigner">修改设计</button>
           </div>
         </div>
         <LayoutEngine
@@ -129,19 +122,5 @@ onMounted(() => {
   cursor: pointer;
   font-size: 13px;
   text-decoration: underline;
-}
-
-.btn-outline {
-  background: white;
-  border: 1px solid #cbd5e1;
-  padding: 3px 10px;
-  border-radius: 6px;
-  color: #475569;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.btn-outline:hover {
-  background: #f1f5f9;
 }
 </style>

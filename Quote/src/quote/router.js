@@ -9,12 +9,6 @@ const router = createRouter({
       name: 'landing',
       component: () => import('./views/LandingView.vue'),
       meta: { title: '商业报价方案' }
-    },
-    {
-      path: '/designer',
-      name: 'designer',
-      component: () => import('../designer/DesignerContainer.vue'),
-      meta: { title: '报价系统设计器' }
     }
   ],
   scrollBehavior: () => ({ top: 0 })
