@@ -424,5 +424,36 @@ git commit -m "feat(designer): implement designer API endpoints"
 
 - [x] 设计文档新增 §17 实现状态与决策记录（含对正文的修订与未完成清单）
 - [x] 修正设计文档"4 张新表"笔误（实际 5 张）
-- [ ] 待办：`nav` 段接入、`source_level` 语义修正、设计器测试统一到 PostgreSQL、黄金屏接入 CI
+- [x] `nav` 段接入（见 Task 16）
+- [ ] 待办：`source_level` 语义修正、设计器测试统一到 PostgreSQL、黄金屏接入 CI
+
+## Task 16: `modules` / `nav` 接入运行时（多模块系统闭环）
+
+**Files:**
+- New: `Workbench/app/designer/navigation.py`、`Workbench/tests/test_designer_navigation.py`
+- New: `Quote/src/renderer/runtimeNav.js`、`RuntimeNav.vue`、`RuntimeShell.vue`
+- New: `Quote/src/renderer/__tests__/runtime_nav.test.js`
+- Modify: `Workbench/app/designer/{schema,validator,compiler,presets}.py`
+- Modify: `Quote/src/renderer/{SpecLoader.js,SpecRenderer.vue}`、`Quote/src/quote/views/LandingView.vue`
+- Modify: `Quote/visual/{seed.js,main.js}`、`Quote/tests/visual/{capture.mjs,compare.py}`
+
+审计发现的三处「声明了没实现」：
+1. `nav` 全仓库零消费方，运行时只渲染 `screens[0]`，Spec 里的 /quotes、/catalog 是死链
+2. `modules` 只在 SpecLoader 里做兜底赋值，从不控制渲染
+3. 员工端直接拼 `ThemeProvider + LayoutEngine` 且**未传 `#render-block` 插槽**，
+   区块根本不渲染 —— 定制界面实际是空骨架
+
+- [x] 后端：模块 → 屏幕 → 导航的确定性映射（`navigation.py`），开单屏在首位，
+      其余按 `MODULE_NAV` 登记顺序展开蓝图屏；settings/employees 无蓝图不产屏
+- [x] 后端：新增第四道门「导航门」，强制 `nav[].id` 与 `screens[].id` 一一对应；
+      剔除死链与未启用模块的项，缺导航项的屏幕自动补齐
+- [x] 后端：编译器与预览共用 `rebuild_navigation`，预览与定稿导航同一套
+- [x] 前端：`RuntimeShell`（导航 + 换屏）+ `RuntimeNav`（渲染在 ThemeProvider 内，
+      跟随品牌 token）；`SpecRenderer` 新增 `activeScreenId`（留空行为不变）
+- [x] 前端：员工端与设计器预览统一改用 `RuntimeShell`，区块终于渲染（空骨架修复）
+- [x] 黄金屏：新增 2 张运行时外壳基准（多屏 + 导航）；`SpecRenderer` 单屏语义不变，
+      原 18 张基准零改动
+- [x] 黄金屏门禁补漏：新增截图缺基准时报错，不再静默通过
+- [ ] 待办：Block 事件接入报价单 store（`SpecRenderer` 目前不转发 block 事件，
+      定制屏仍是「可看不可成交」—— 见交接说明）
 
