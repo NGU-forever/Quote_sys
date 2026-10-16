@@ -7,6 +7,7 @@
  *   2. modules 段 → 只有启用的模块才有对应屏幕与导航项
  *   3. screens 段 → 按当前激活屏切换渲染
  *   4. entities/output/rules → 由 SpecRenderer 注入 SpecContext 供各 Block 消费
+ *   5. 区块事件 → 原样上抛给宿主（宿主适配器落到报价单 store）
  *
  * 此前员工端直接拼 ThemeProvider + LayoutEngine，既没有 #render-block 插槽
  * （区块根本不渲染，只剩空骨架），也没有注入 SpecContext。统一走这个外壳后，
@@ -25,6 +26,16 @@ const props = defineProps({
   /** 初始激活屏；留空取第一屏。用于深链，也让黄金屏能指定渲染某一屏。 */
   initialScreenId: { type: String, default: '' },
 });
+
+const emit = defineEmits([
+  'add-item',
+  'update-qty',
+  'remove-item',
+  'apply-bundle',
+  'save-draft',
+  'print-a4',
+  'export-pdf',
+]);
 
 const navItems = computed(() => getNavItems(props.spec));
 const activeScreenId = ref(resolveActiveScreenId(props.spec, props.initialScreenId));
@@ -49,6 +60,14 @@ function handleNavigate(screenId) {
     :data="data"
     :quote-seq="quoteSeq"
     :active-screen-id="activeScreenId"
+    :total-amount="typeof data.totalAmount === 'number' ? data.totalAmount : null"
+    @add-item="emit('add-item', $event)"
+    @update-qty="emit('update-qty', $event)"
+    @remove-item="emit('remove-item', $event)"
+    @apply-bundle="emit('apply-bundle', $event)"
+    @save-draft="emit('save-draft')"
+    @print-a4="emit('print-a4')"
+    @export-pdf="emit('export-pdf')"
   >
     <template #chrome="slotProps">
       <RuntimeNav :items="navItems" :active="activeScreenId" @navigate="handleNavigate" />

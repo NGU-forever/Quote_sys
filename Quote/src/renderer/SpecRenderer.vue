@@ -18,6 +18,7 @@ import LayoutEngine from './LayoutEngine.vue';
 import QuotePrintArea from './QuotePrintArea.vue';
 import ThemeProvider from './tokens/ThemeProvider.vue';
 import { getBlockComponent } from './BlockRegistry.js';
+import { listenersFor as buildListeners } from './blockEvents.js';
 import { formatQuoteNo } from './SpecContext.js';
 import { provideSpecContext } from './SpecProvider.js';
 
@@ -30,7 +31,28 @@ const props = defineProps({
    * 多屏切换由 RuntimeShell 负责，SpecRenderer 本身只渲染"一屏"。
    */
   activeScreenId: { type: String, default: '' },
+  /**
+   * 合计覆盖值。留空/null 时按行项目相加（原行为）。
+   * 有套餐优惠时宿主应传入真实有效总价，避免定制屏的合计比经典视图偏高。
+   */
+  totalAmount: { type: Number, default: null },
 });
+
+// 区块事件 → 动态监听对象（映射逻辑见 blockEvents.js，可单测）
+// 注意：defineEmits 必须用字面量（编译器宏不接受变量引用）
+const emit = defineEmits([
+  'add-item',
+  'update-qty',
+  'remove-item',
+  'apply-bundle',
+  'save-draft',
+  'print-a4',
+  'export-pdf',
+]);
+
+function listenersFor(blockType) {
+  return buildListeners(blockType, emit);
+}
 
 const ctx = provideSpecContext(props.spec);
 
@@ -49,9 +71,13 @@ const company = computed(
   () => props.data?.company || { name: '某某医疗科技有限公司', logo: '' }
 );
 
-const totalAmount = computed(() =>
-  items.value.reduce((sum, item) => sum + Number(item.unit_price || 0) * Number(item.qty || 0), 0)
-);
+const totalAmount = computed(() => {
+  if (typeof props.totalAmount === 'number') return props.totalAmount;
+  return items.value.reduce(
+    (sum, item) => sum + Number(item.unit_price || 0) * Number(item.qty || 0),
+    0
+  );
+});
 
 /** 底价违规：既要有真实低价的明细，也要 rules.price_floor_guard 允许拦截 */
 const hasViolation = computed(
@@ -75,6 +101,7 @@ const salesName = computed(
       <template #render-block="{ block }">
         <component
           :is="getBlockComponent(block.type)"
+          v-bind="listenersFor(block.type)"
           :props="block.props"
           :products="products"
           :items="items"

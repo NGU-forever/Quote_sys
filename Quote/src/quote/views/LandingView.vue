@@ -1,21 +1,38 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useCatalogStore } from '../../shared/stores/catalog'
 import { getApiBase } from '../../shared/utils/backendConfig'
 import SiteHeader from '../components/SiteHeader.vue'
 import QuoteSection from '../components/QuoteSection.vue'
+import ExportQuoteModal from '../components/ExportQuoteModal.vue'
 import RuntimeShell from '../../renderer/RuntimeShell.vue'
+import { useSpecRuntime } from '../composables/useSpecRuntime.js'
+import logoUrl from '../assets/克夫尼.jpg'
 
 const catalog = useCatalogStore()
 
 const activeSpec = ref(null)
 const useClassicView = ref(false)
+const showExportModal = ref(false)
+const printFrame = ref(null)
 
-// 运行时数据：商品来自目录。明细/客户等由宿主适配器提供，
-// 目前仅注入目录，保证定制屏的区块不再渲染成空骨架。
-const runtimeData = computed(() => ({
-  products: catalog.allProducts || [],
-}))
+// 宿主适配器：把 Spec 界面接到真实报价单 store 上（下行数据 + 上行动作）
+const { data: runtimeData, dispatch } = useSpecRuntime({
+  onExport: () => {
+    showExportModal.value = true
+  },
+})
+
+// 区块事件 → 适配器。定制屏与经典视图共用同一个 store，切换视图不丢数据。
+const blockHandlers = {
+  'add-item': (payload) => dispatch('add-item', payload),
+  'update-qty': (payload) => dispatch('update-qty', payload),
+  'remove-item': (payload) => dispatch('remove-item', payload),
+  'apply-bundle': (payload) => dispatch('apply-bundle', payload),
+  'save-draft': () => dispatch('save-draft'),
+  'print-a4': () => dispatch('print-a4'),
+  'export-pdf': () => dispatch('export-pdf'),
+}
 
 // 检查后端是否有已定稿的 UiSpec
 async function checkActiveSpec() {
@@ -48,7 +65,7 @@ onMounted(() => {
   <main>
     <!-- 如果后端已定稿 UiSpec 且用户未主动切回经典视图，按 Spec 呈现定制化系统 -->
     <template v-if="activeSpec && !useClassicView">
-      <RuntimeShell :spec="activeSpec" :data="runtimeData">
+      <RuntimeShell :spec="activeSpec" :data="runtimeData" v-on="blockHandlers">
         <template #chrome>
           <div class="custom-spec-banner">
             <div class="banner-info">
@@ -72,6 +89,15 @@ onMounted(() => {
       <QuoteSection />
     </template>
   </main>
+
+  <!-- 定制屏的「保存为草稿 / 打印 / 导出」与经典视图共用同一个弹窗：
+       服务端提交、官方单号、底价拦截都在这里闭环。 -->
+  <ExportQuoteModal
+    v-model="showExportModal"
+    :logo-url="logoUrl"
+    :iframe-el="printFrame"
+  />
+  <iframe ref="printFrame" class="quote-print-frame" title="报价单打印"></iframe>
 </template>
 
 <style scoped>
