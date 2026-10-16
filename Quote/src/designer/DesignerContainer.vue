@@ -1,48 +1,78 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { createWizardState, applyPresetToWizard } from './wizardState.js';
+import { designerApi } from './designerClient.js';
+import {
+  buildLocalSummary,
+  describeDesignerError,
+  interpretProfileResponse,
+} from './profileSummary.js';
 
 import Screen0PreviewCards from './Screen0PreviewCards.vue';
 import ScreenWizard from './ScreenWizard.vue';
 import Screen8SummaryConfirm from './Screen8SummaryConfirm.vue';
 import SpecRenderer from '../renderer/SpecRenderer.vue';
-import { getApiBase } from '../shared/utils/backendConfig.js';
 
 const state = ref(createWizardState());
 const isFinalizing = ref(false);
 const finalized = ref(false);
 const ranking = ref(['order-entry', 'wholesale', 'management']);
+const loadError = ref('');
+
+// 第 8 屏摘要：后端画像为准，本地兜底
+const profile = ref({
+  summaryText: '',
+  source: 'local',
+  llmEnabled: false,
+  issues: [],
+  terminologyHint: '',
+});
 
 // 获取 signals 与样本数据
 async function loadSignals() {
   try {
-    const apiBase = getApiBase();
-    const res = await fetch(`${apiBase}/designer/signals`, { method: 'POST' });
-    if (res.ok) {
-      const data = await res.json();
-      ranking.value = data.ranking || ranking.value;
-      state.value.sourceLevel = data.source_level;
-      state.value.sourceLabel = data.sample_data?.source_label || state.value.sourceLabel;
-      state.value.sampleData = data.sample_data;
-      state.value.signals = data.signals;
-    }
+    const data = await designerApi.signals();
+    ranking.value = data.ranking || ranking.value;
+    state.value.sourceLevel = data.source_level;
+    state.value.sourceLabel = data.sample_data?.source_label || state.value.sourceLabel;
+    state.value.sampleData = data.sample_data;
+    state.value.signals = data.signals;
+    loadError.value = '';
   } catch (e) {
-    // 降级使用内置离线默认值
+    // 后端不可达/未登录：保留内置离线默认值，但把原因显式告诉用户
+    loadError.value = describeDesignerError(e);
+  }
+}
+
+/**
+ * 拉取业务画像与人话摘要。
+ *
+ * 摘要必须来自后端 —— 它会把库内画像、资料术语口径（底价/供货价/同行价）
+ * 与可选的模型判断一起带进来；前端不再自己维护一份硬编码文案。
+ * 失败时退回本地同构模板并标记 source='local'。
+ */
+async function loadProfile() {
+  try {
+    const payload = await designerApi.profile(state.value.answers);
+    profile.value = interpretProfileResponse(payload, state.value.answers);
+    loadError.value = '';
+  } catch (e) {
+    profile.value = interpretProfileResponse(null, state.value.answers);
+    loadError.value = describeDesignerError(e);
   }
 }
 
 // 检查是否已有 active spec
 async function checkActiveSpec() {
   try {
-    const apiBase = getApiBase();
-    const res = await fetch(`${apiBase}/designer/spec`);
-    if (res.ok) {
-      const data = await res.json();
+    const data = await designerApi.activeSpec();
+    if (data && data.payload) {
       state.value.activeSpec = data.payload;
       finalized.value = true;
     }
   } catch (e) {
-    // 尚未定稿
+    // 未登录或尚未定稿：保持未定稿状态
+    if (!loadError.value) loadError.value = describeDesignerError(e);
   }
 }
 
@@ -56,6 +86,7 @@ function handleSelectPreset(presetId) {
   applyPresetToWizard(state.value, presetId);
   // 直接前往第 8 步一键定稿确认
   state.value.currentStep = 8;
+  loadProfile();
 }
 
 // 开启 8 步向导
@@ -73,6 +104,7 @@ function handleNextStep() {
     state.value.currentStep++;
   } else {
     state.value.currentStep = 8;
+    loadProfile();
   }
 }
 
@@ -84,59 +116,25 @@ function handlePrevStep() {
   }
 }
 
-// 生成第 8 步摘要
-const summaryText = computed(() => {
-  const ans = state.value.answers;
-  const sellModeMap = {
-    device_with_consumable: '设备与配套耗材',
-    consumable_only: '高频耗材配件',
-    service: '技术与解决方案服务',
-    mixed: '综合软硬件品类',
-  };
-  const sceneMap = {
-    on_site: '客户现场笔记本',
-    office: '办公室电脑',
-    mobile: '手机移动端',
-  };
-  const pricingMap = {
-    floor_price: '按底价卖严禁议价',
-    negotiable: '允许折让但超限需审批',
-    tiered: '按批发数量自动阶梯价',
-  };
-
-  return (
-    `我理解你是：向${ans.industry}销售${sellModeMap[ans.sell_mode] || '主要商品'}，` +
-    `销售在${sceneMap[ans.scene] || '现场'}开单，` +
-    `${pricingMap[ans.pricing_mode] || '底价模式'}，` +
-    `报价单以${ans.output_target === 'print_a4' ? '打印 A4 纸质' : '高品质 PDF'}交付客户，` +
-    `主色使用你的${ans.brand_color_name}。`
-  );
-});
+// 第 8 步摘要：后端摘要优先，未取到时用本地同构模板兜底（不出现空白）
+const summaryText = computed(
+  () => profile.value.summaryText || buildLocalSummary(state.value.answers)
+);
 
 // 定稿
 async function handleFinalize() {
   isFinalizing.value = true;
   try {
-    const apiBase = getApiBase();
-    const compileRes = await fetch(`${apiBase}/designer/compile`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ answers: state.value.answers }),
-    });
-    const compiled = await compileRes.json();
-
-    const finalizeRes = await fetch(`${apiBase}/designer/finalize`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ spec: compiled.spec }),
-    });
-
-    if (finalizeRes.ok) {
-      state.value.activeSpec = compiled.spec;
-      finalized.value = true;
+    const compiled = await designerApi.compile(state.value.answers);
+    // 后端编译时会重算画像与摘要，用它刷新第 8 屏文案，保证"所见即所定"。
+    if (compiled.summary_text) {
+      profile.value = { ...profile.value, summaryText: compiled.summary_text, source: 'backend' };
     }
+    await designerApi.finalize(compiled.spec);
+    state.value.activeSpec = compiled.spec;
+    finalized.value = true;
   } catch (e) {
-    alert('定稿提交失败，请重试');
+    alert(`定稿提交失败：${describeDesignerError(e)}`);
   } finally {
     isFinalizing.value = false;
   }
@@ -146,12 +144,15 @@ async function handleFinalize() {
 async function handleResetEscape() {
   if (confirm('确定要重新走向导吗？这只会换一套界面设计，不会删除任何真实的商品与报价单。')) {
     try {
-      const apiBase = getApiBase();
-      await fetch(`${apiBase}/designer/reset`, { method: 'POST' });
-    } catch (e) {}
+      await designerApi.reset();
+    } catch {
+      // 重置失败不阻塞本地退回向导
+    }
     finalized.value = false;
     state.value.currentStep = 0;
     state.value.activeSpec = null;
+    state.value.selectedPreset = null;
+    profile.value = interpretProfileResponse(null, state.value.answers);
   }
 }
 </script>
@@ -220,6 +221,11 @@ async function handleResetEscape() {
         v-else-if="state.currentStep === 8"
         :summary-text="summaryText"
         :is-finalizing="isFinalizing"
+        :llm-enabled="profile.llmEnabled"
+        :issues="profile.issues"
+        :terminology-hint="profile.terminologyHint"
+        :summary-source="profile.source"
+        :error="loadError"
         @confirm-finalize="handleFinalize"
         @modify-answers="state.currentStep = 1"
       />
