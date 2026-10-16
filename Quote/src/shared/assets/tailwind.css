@@ -1,0 +1,7 @@
+/*
+ * Tailwind 工具类入口（renderer / designer 使用）。
+ * 只注入工具类，不含 base / preflight —— 既有界面样式由 main.css 维护。
+ * 引入顺序：先 tailwind.css（工具类），再 main.css（既有样式可覆盖）。
+ */
+@tailwind components;
+@tailwind utilities;
