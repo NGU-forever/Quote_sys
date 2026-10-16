@@ -6,7 +6,7 @@
  *   node tests/visual/capture.mjs --update   # 重新生成基准（渲染器/token 有意的改动）
  *   node tests/visual/capture.mjs --no-build # 跳过 vite 构建，直接用已有 visual-dist
  *
- * 覆盖矩阵：3 风格 × 5 骨架 = 15 张屏幕基准 + 3 张打印版式基准 + 2 张运行时外壳基准 = 20 张。
+ * 覆盖矩阵：3 风格 × 5 骨架 = 15 张屏幕基准 + 3 张打印版式基准 + 2 张运行时外壳基准 + 1 张宿主适配器基准 = 21 张。
  *
  * 实现要点：把 IIFE bundle 与 CSS 内联成**单个自包含 HTML**，用 file:// 截图，
  * 不依赖本地 HTTP 服务 —— 在受限/CI 环境下更稳（Chrome 连 localhost 可能被拦）。
@@ -149,6 +149,14 @@ function targets() {
       viewport: VIEWPORT.default,
     })
   }
+  // 宿主适配器：真实 pinia store + useSpecRuntime → 运行时外壳。
+  // 这一屏的金额/明细/合计全部来自报价单 store 的真实计算。
+  // 标准视口：真实目录（25 个商品）下，左栏必须内部滚动才能让底部合计与导出留在屏内
+  list.push({
+    name: 'adapter__quote_editor__medical-clean.png',
+    query: '?adapter=1&preset=medical-clean&screen=quote_editor',
+    viewport: VIEWPORT.default,
+  })
   return list
 }
 
