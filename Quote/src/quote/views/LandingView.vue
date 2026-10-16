@@ -1,16 +1,21 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useCatalogStore } from '../../shared/stores/catalog'
 import { getApiBase } from '../../shared/utils/backendConfig'
 import SiteHeader from '../components/SiteHeader.vue'
 import QuoteSection from '../components/QuoteSection.vue'
-import ThemeProvider from '../../renderer/tokens/ThemeProvider.vue'
-import LayoutEngine from '../../renderer/LayoutEngine.vue'
+import RuntimeShell from '../../renderer/RuntimeShell.vue'
 
 const catalog = useCatalogStore()
 
 const activeSpec = ref(null)
 const useClassicView = ref(false)
+
+// 运行时数据：商品来自目录。明细/客户等由宿主适配器提供，
+// 目前仅注入目录，保证定制屏的区块不再渲染成空骨架。
+const runtimeData = computed(() => ({
+  products: catalog.allProducts || [],
+}))
 
 // 检查后端是否有已定稿的 UiSpec
 async function checkActiveSpec() {
@@ -41,26 +46,21 @@ onMounted(() => {
 <template>
   <SiteHeader />
   <main>
-    <!-- 如果后端已定稿 UiSpec 且用户未主动切回经典视图，直接呈现定制化渲染界面 -->
+    <!-- 如果后端已定稿 UiSpec 且用户未主动切回经典视图，按 Spec 呈现定制化系统 -->
     <template v-if="activeSpec && !useClassicView">
-      <ThemeProvider
-        :preset-id="activeSpec.style?.preset_id"
-        :tokens="activeSpec.style?.tokens"
-      >
-        <div class="custom-spec-banner">
-          <div class="banner-info">
-            <span class="badge">已激活定制界面</span>
-            <span class="spec-name">{{ activeSpec.meta?.name || '企业定制方案' }}</span>
+      <RuntimeShell :spec="activeSpec" :data="runtimeData">
+        <template #chrome>
+          <div class="custom-spec-banner">
+            <div class="banner-info">
+              <span class="badge">已激活定制界面</span>
+              <span class="spec-name">{{ activeSpec.meta?.name || '企业定制方案' }}</span>
+            </div>
+            <div class="banner-actions">
+              <button class="btn-text" @click="toggleView">切换至经典计算器</button>
+            </div>
           </div>
-          <div class="banner-actions">
-            <button class="btn-text" @click="toggleView">切换至经典计算器</button>
-          </div>
-        </div>
-        <LayoutEngine
-          :spec="activeSpec"
-          :screen="activeSpec.screens?.[0] || {}"
-        />
-      </ThemeProvider>
+        </template>
+      </RuntimeShell>
     </template>
 
     <!-- 默认/经典阶梯比价开单页面 -->

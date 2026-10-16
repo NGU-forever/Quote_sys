@@ -25,11 +25,22 @@ const props = defineProps({
   spec: { type: Object, required: true },
   data: { type: Object, default: () => ({}) },
   quoteSeq: { type: Number, default: 1 },
+  /**
+   * 要渲染的屏幕 id。留空时渲染 screens[0]（黄金屏与单屏宿主的行为不变）。
+   * 多屏切换由 RuntimeShell 负责，SpecRenderer 本身只渲染"一屏"。
+   */
+  activeScreenId: { type: String, default: '' },
 });
 
 const ctx = provideSpecContext(props.spec);
 
-const screen = computed(() => props.spec?.screens?.[0] || null);
+const screen = computed(() => {
+  const screens = props.spec?.screens || [];
+  if (props.activeScreenId) {
+    return screens.find((item) => item.id === props.activeScreenId) || screens[0] || null;
+  }
+  return screens[0] || null;
+});
 const products = computed(() => props.data?.products || []);
 const items = computed(() => props.data?.items || []);
 const bundle = computed(() => props.data?.bundle || null);
