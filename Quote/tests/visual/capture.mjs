@@ -6,7 +6,7 @@
  *   node tests/visual/capture.mjs --update   # 重新生成基准（渲染器/token 有意的改动）
  *   node tests/visual/capture.mjs --no-build # 跳过 vite 构建，直接用已有 visual-dist
  *
- * 覆盖矩阵：3 风格 × 5 骨架 = 15 张屏幕基准 + 3 张打印版式基准 = 18 张。
+ * 覆盖矩阵：3 风格 × 5 骨架 = 15 张屏幕基准 + 3 张打印版式基准 + 2 张运行时外壳基准 = 20 张。
  *
  * 实现要点：把 IIFE bundle 与 CSS 内联成**单个自包含 HTML**，用 file:// 截图，
  * 不依赖本地 HTTP 服务 —— 在受限/CI 环境下更稳（Chrome 连 localhost 可能被拦）。
@@ -136,6 +136,17 @@ function targets() {
       name: `print__${preset}.png`,
       query: `?skeleton=catalog-left-form-right&preset=${preset}&print=1`,
       viewport: VIEWPORT.print,
+    })
+  }
+  // 运行时外壳：多屏 + 顶部导航（`nav` / `modules` 接入后的回归基准）
+  for (const [preset, screen] of [
+    ['medical-clean', 'quote_editor'],
+    ['medical-clean', 'quotes'],
+  ]) {
+    list.push({
+      name: `shell__${screen}__${preset}.png`,
+      query: `?shell=1&preset=${preset}&screen=${screen}`,
+      viewport: VIEWPORT.default,
     })
   }
   return list

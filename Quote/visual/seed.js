@@ -191,6 +191,17 @@ export function buildSpec(skeleton, presetId) {
         skeleton,
         blocks: BLOCKS_BY_SKELETON[skeleton] || BLOCKS_BY_SKELETON['catalog-left-form-right'],
       },
+      // 第二屏：与后端 navigation.py 的 quotes 蓝图一致，
+      // 让集成后的多屏 + 顶部导航在黄金屏里可被验证（SpecRenderer 仍只渲染第一屏）。
+      {
+        id: 'quotes',
+        skeleton: 'dashboard-grid',
+        blocks: [
+          { type: 'stats_cards', props: { metrics: ['today_sales', 'pending_approvals'] } },
+          { type: 'recent_quotes', props: { max_items: 10 } },
+          { type: 'activity_timeline', props: { max_items: 8 } },
+        ],
+      },
     ],
     entities: {
       product: {

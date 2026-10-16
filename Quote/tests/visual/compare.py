@@ -51,6 +51,17 @@ def main() -> int:
         print(f"[visual] 基准目录为空：{BASELINE}")
         return 1
 
+    # 本次渲染了、但基准里没有的组合：必须显式 --update 建基准。
+    # 否则新增黄金屏会在无人察觉的情况下永远不被回归覆盖（曾经如此）。
+    baseline_names = {p.name for p in baselines}
+    orphans = sorted(p.name for p in CURRENT.glob("*.png") if p.name not in baseline_names)
+    if orphans:
+        print("[visual] 以下组合本次渲染了但没有基准：")
+        for name in orphans:
+            print(f"  ? {name}")
+        print("确认无误后运行：node tests/visual/capture.mjs --update 建立基准")
+        return 1
+
     failures: list[str] = []
     unchanged = 0
     for base_path in baselines:
