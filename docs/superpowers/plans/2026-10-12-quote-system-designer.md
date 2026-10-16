@@ -372,4 +372,57 @@ git commit -m "feat(designer): implement designer API endpoints"
 - [x] **Step 2: 执行全量测试验证**
 - [x] **Step 3: 提交代码与集成验收记录**
 
-EOF
+---
+
+# 补充阶段（2026-10-13）：Spec 表达力接入、黄金屏与 M4
+
+> 上一阶段完成后审计发现：Spec 的 `entities/output/rules` 后端产出但前端零消费；
+> 仓库缺少 Tailwind 导致设计器无样式；黄金屏仅有 JSON 断言无截图基准；
+> M4（模型接入）未做。以下为本轮补齐项，验收标准见设计文档 §17。
+
+## Task 12: entities / output / rules 接入渲染器
+
+**Files:**
+- New: `Quote/src/renderer/SpecContext.js`、`SpecProvider.js`、`SpecRenderer.vue`、`QuotePrintArea.vue`
+- Modify: `Quote/src/renderer/blocks/*.vue`（10 个）、`Quote/src/designer/DesignerContainer.vue`
+- Test: `Quote/src/renderer/__tests__/spec_context.test.js`
+
+- [x] Spec 上下文（标签/列/规则/打印配置）+ 格式化（面议与空值降级）
+- [x] 10 个 block 消费 entities/output/rules（列集合、术语、底价保护、审批、单号规则）
+- [x] `QuotePrintArea` 由 `output.quote_pdf` 驱动（纸张/页眉/表格/底价/条款 + @page 注入）
+- [x] 宿主改用 `SpecRenderer`，去掉硬编码 `total-amount=98500` / `has-violation=true`
+- [x] 补齐 Tailwind 样式链路（preflight 关闭，不影响既有界面）
+- [x] 单测 6 项
+
+## Task 13: 黄金屏截图基准与回归门禁
+
+**Files:**
+- New: `Quote/visual/{index.html,main.js,seed.js,harness.css,PrintHarness.vue}`、`Quote/vite.visual.config.js`
+- New: `Quote/tests/visual/capture.mjs`、`compare.py`、`Quote/visual/baseline/*.png`（18 张）
+- Modify: `Quote/package.json`（`test:visual` / `test:visual:update`）、`.gitignore`
+
+- [x] 3 风格 × 5 骨架 = 15 张屏幕基准 + 3 张打印版式基准
+- [x] 自包含 HTML + file:// 渲染（绕开受限环境下 Chrome 连 localhost 挂起）
+- [x] IIFE 构建显式 define `process.env.NODE_ENV`（否则浏览器 `process is not defined`）
+- [x] Pillow 像素比对，默认阈值 0.05%，失败输出差异图
+- [x] 双向验证：改主色 token → 5 张失败；还原 → 18/18 通过
+
+## Task 14: M4 大模型接入（画像 + 术语 + 有界自愈）
+
+**Files:**
+- New: `Workbench/app/designer/{llm.py,profiles.py,terminology.py}`
+- Modify: `Workbench/app/designer/compiler.py`、`Workbench/app/api/designer.py`
+- Test: `Workbench/tests/test_designer_llm.py`（18 项）
+
+- [x] 资料 + 库内统计 → 业务画像（未配置模型时纯规则，功能不降级）
+- [x] 行业术语本地化（底价/供货价/同行价/批发价 + 促销语气）
+- [x] 模型提案过三道门，失败回传具体错误，最多 3 次自愈，仍失败回退规则 Spec
+- [x] 新增 `POST /api/designer/profile`；`/compile` 支持 `enrich` 开关
+- [x] 顺带修复：5 骨架全部可达、`customers` 模块产出
+
+## Task 15: 文档同步
+
+- [x] 设计文档新增 §17 实现状态与决策记录（含对正文的修订与未完成清单）
+- [x] 修正设计文档"4 张新表"笔误（实际 5 张）
+- [ ] 待办：`nav` 段接入、`source_level` 语义修正、设计器测试统一到 PostgreSQL、黄金屏接入 CI
+

@@ -103,7 +103,7 @@
 │  renderer/  └ presets/     3 套风格包（token 数据）                    │
 └───────────────────────────────┬───────────────────────────────────────┘
                                 │
-        PostgreSQL（现有表 + 4 张新表，见 §10）
+        PostgreSQL（现有表 + 5 张新表，见 §10）
 ```
 
 ### 3.2 一次完整流程
@@ -664,5 +664,109 @@ ThemeProvider  三层 token → CSS 变量注入根节点
 ## 附：本文档与既有系统的关系
 
 - 复用：现有 `Product/Package/DeviceBinding/Quote/User/AppSetting`、现有 Agent 的资料解析、`schema_utils` 校验模式、鉴权与 DB 依赖、测试体系
-- 新增：`designer/` 后端模块、`renderer/` 前端模块、4 张新表（§10）、3 套风格包
+- 新增：`designer/` 后端模块、`renderer/` 前端模块、5 张新表（§10）、3 套风格包
 - 不动：现有业务表结构、现有 Agent 的运行逻辑、报价与权限的业务规则
+
+---
+
+# §17 实现状态与决策记录（2026-10-13 更新）
+
+> 本节是对上面正文的**增量修订**：正文描述目标设计，本节记录实际落地情况、
+> 本轮新增的三项工作、以及审计发现的既有问题。若两者冲突，以本节为准。
+
+## 17.1 本轮完成（对应任务）
+
+| # | 任务 | 结果 | 关键产物 |
+|---|---|---|---|
+| 1 | **entities / output / rules 接进渲染器** | ✅ | `SpecContext.js`、`SpecProvider.js`、`SpecRenderer.vue`、`QuotePrintArea.vue`；10 个 block 改为消费 Spec |
+| 2 | **黄金屏截图基准** | ✅ | `Quote/visual/`、`Quote/tests/visual/`、18 张基准（3 风格 × 5 骨架 + 3 打印） |
+| 3 | **M4 大模型接入** | ✅ | `designer/llm.py`、`designer/profiles.py`、`designer/terminology.py`；`/api/designer/profile` |
+
+回归结果：后端 **153 passed**（+18 M4），前端 **16 passed**（+6 SpecContext），黄金屏 **18/18 通过**。
+
+## 17.2 决策记录（含对正文的修订）
+
+| 编号 | 决策 | 说明 |
+|---|---|---|
+| D6 | **渲染器归 `Quote/`（Electron 销售端），管理后台不参与** | 修正正文 §12 中"建议放 `Workbench/web/src/renderer`"的表述；`Workbench/web` 不引入渲染器 |
+| D7 | **引入 Tailwind（v3），关闭 preflight** | `renderer/designer` 的 190 处工具类此前**无任何样式系统支撑**（见 17.3-1）。关闭 preflight 以免重置既有 `main.css` 维护的界面样式 |
+| D8 | **视觉回归用「自包含 HTML + file://」而非本地 HTTP 服务** | 受限环境下 Chrome 连 `localhost` 会挂起；IIFE + 内联 CSS/JS 更稳，也无端口冲突 |
+| D9 | **Spec 消费优先级**：块级 `props` > `entities.<实体>` > 内置默认 | 块级列定义针对"这一屏"，实体级针对"该实体列表页" |
+| D10 | **模型只做画像与术语，且必须过三道门** | `enrich_spec_with_llm` 带 3 次有界自愈；3 次不过或调用失败 → 回退规则 Spec，**永不把错误抛给用户** |
+| D11 | **不配置模型也必须完全可用** | `resolve_provider` 返回 None 时全程规则；`/compile` 支持 `enrich=false` |
+
+## 17.3 审计发现并修复的既有问题
+
+| 级别 | 问题 | 影响 | 处理 |
+|---|---|---|---|
+| **P0** | 仓库**没有 Tailwind**（不在依赖、无配置、无指令），而 renderer/designer 有 190 处工具类 | 设计器整体**无样式**，黄金屏任务正是靠这个暴露出来 | 装 `tailwindcss@3` + `postcss`，加 `tailwind.config.js`/`postcss.config.js`/`tailwind.css`，`preflight: false` |
+| **P0** | Spec 的 `entities / output / rules / nav / profile` **后端产出并校验，但前端 0 处消费** | "生成一套系统"实际只等于"换骨架换风格" | 本轮接入 `entities`/`output`/`rules`（`nav` 仍待办，见 17.4） |
+| **P1** | `form-first-wizard`、`dashboard-grid` **编译路径不可达**（compiler 只按 scene 产出 3 种） | 用户在第 0 屏选"管理型"，走向导后被覆盖成开单型 | `resolve_skeleton()` 5 个骨架全可达 + `wizardState` 增加 `view_mode` |
+| **P1** | `customers` 模块**永不产出** | §5.3 规则缺失 | `resolve_modules()` 按 `customer_repeat_rate > 1.5` 产出 |
+| **P2** | `source_level` 语义与文档不一致（实现按"有商品无单据"推断） | 手工录商品的客户会被标注成"用你上传的资料渲染" | **未修**，列入 17.4（涉及文案与信任，需要产品口径确认） |
+| **P2** | 新增设计器测试用 `sqlite:///:memory:` | 与"SQLite 已彻底移除"的架构约定冲突（依赖 stdlib sqlite3 才没报错） | **未修**，列入 17.4 |
+| — | 设计文档自身写"4 张新表"实际 5 张 | 文档错误 | 已修正 |
+
+## 17.4 仍未完成 / 已知问题
+
+1. **`nav` 段未接入**：Spec 的导航定义尚未驱动界面（需要与 Quote 既有路由整合）。
+2. **`source_level` 标签语义**：应改为记录"预览数据的真实来源"，而不是从"有单据/无单据"推断。
+3. **设计器测试仍用内存 SQLite**：建议统一到 `tests/db_support.py`（PostgreSQL），否则该模块是 SQLite 的唯一残留。
+4. **黄金屏未接入 CI**：目前需手动 `npm run test:visual`；基准图 1.3MB 入库。
+5. **M4 的实测质量未知**：规则链路已测，真实模型下的画像/术语准确率尚未用真实接口验证（需要额度）。
+6. **`/answer` 端点仍未实现**：向导答案保存在前端内存，刷新丢失（正文 §11 列的是 9 个端点，实现 8+1=9 个）。
+
+## 17.5 新增/变更文件
+
+**后端**
+```
+app/designer/llm.py          # 模型增强 + 三道门 + 有界自愈 + provider 解析
+app/designer/profiles.py     # 资料 → 业务画像（规则优先，模型可选）
+app/designer/terminology.py  # 术语本地化（底价/供货价/同行价/批发价）
+app/designer/compiler.py     # 重写：5 骨架可达、customers 模块、画像与术语注入
+app/api/designer.py          # 新增 POST /profile；/compile 支持 enrich 开关
+tests/test_designer_llm.py   # 18 项：画像/术语/自愈/编译器/路由
+```
+
+**前端（`Quote/`）**
+```
+src/renderer/SpecContext.js   # 纯逻辑：标签、列解析、规则、格式化（不依赖 vue）
+src/renderer/SpecProvider.js  # vue provide/inject 适配层
+src/renderer/SpecRenderer.vue # ThemeProvider + LayoutEngine + QuotePrintArea + rules 派生数据
+src/renderer/QuotePrintArea.vue # output.quote_pdf 驱动的打印版式（含 @page 注入）
+src/renderer/blocks/*.vue     # 10 个 block 改为消费 entities/output/rules
+src/renderer/__tests__/spec_context.test.js
+visual/                       # 黄金屏种子数据 + 独立打印 harness
+tests/visual/capture.mjs      # 构建 + 截图 + 调用比对（--update 生成基准）
+tests/visual/compare.py       # Pillow 像素比对（默认阈值 0.05%）
+visual/baseline/*.png         # 18 张基准（入库）
+tailwind.config.js / postcss.config.js / src/shared/assets/tailwind.css
+```
+
+## 17.6 运行方式
+
+```bash
+# 后端（含设计器）
+cd Workbench && .venv/bin/python -m pytest tests -q
+
+# 前端单测（16 项）
+cd Quote && npm test
+
+# 黄金屏回归（需先 npm install；依赖本地 Chrome）
+cd Quote
+npm run test:visual          # 与基准比对，超阈值失败并输出差异图到 visual/current/diff/
+npm run test:visual:update   # 渲染器/token 有意改动后重新生成基准
+# 阈值可用 VISUAL_THRESHOLD=0.0002 收紧；CI 无 Chrome 时该步骤应跳过（退出码 2）
+
+# 设计器接口
+POST /api/designer/signals   # 画像指标 + 排序 + 采样
+POST /api/designer/profile   # 资料 → 业务画像（llm_enabled=false 表示走规则）
+POST /api/designer/compile   # {"answers": {...}, "enrich": true}
+```
+
+## 17.7 黄金屏判定标准的经验值
+
+- 同一次构建重复渲染：差异 **0.000%**（确定性），因此阈值可设得很紧
+- 改一个主色 token：medical-clean 组合产生 **0.11%–0.46%** 差异
+- 默认阈值取 **0.05%**：比噪声高、比真实回归低，能拦住配色/间距/文案类改动
+
