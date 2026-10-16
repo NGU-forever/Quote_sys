@@ -25,7 +25,7 @@ async function checkActiveSpec() {
         activeSpec.value = data.payload
       }
     }
-  } catch (e) {
+  } catch {
     // 离线或后端未配置时保持默认
   }
 }

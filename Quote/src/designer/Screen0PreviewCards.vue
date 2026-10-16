@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue';
 
-const props = defineProps({
+defineProps({
   ranking: {
     type: Array,
     default: () => ['order-entry', 'wholesale', 'management'],

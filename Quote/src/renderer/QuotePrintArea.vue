@@ -7,7 +7,7 @@
  */
 import { computed, onBeforeUnmount, onMounted } from 'vue';
 
-import { formatCell, formatMoney } from './SpecContext.js';
+import { formatMoney } from './SpecContext.js';
 import { useSpecContext } from './SpecProvider.js';
 
 const props = defineProps({

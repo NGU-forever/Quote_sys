@@ -1,7 +1,5 @@
 <script setup>
-import { computed } from 'vue';
-
-const props = defineProps({
+defineProps({
   step: {
     type: Number,
     required: true,

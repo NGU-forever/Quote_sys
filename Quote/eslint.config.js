@@ -15,7 +15,8 @@ export default [
       '**/dist-ssr/**',
       '**/release/**',
       '**/coverage/**',
-      '**/node_modules/**'
+      '**/node_modules/**',
+      '**/visual-dist/**'
     ]
   },
   {
@@ -28,21 +29,21 @@ export default [
   },
   {
     name: 'app/browser-code',
-    files: ['src/**/*.{js,vue}', 'vite.config.js'],
+    files: ['src/**/*.{js,vue}', 'vite.config.js', 'visual/**/*.js'],
     languageOptions: {
       globals: globals.browser
     }
   },
   {
     name: 'app/vite-config',
-    files: ['vite.config.js'],
+    files: ['vite.config.js', 'vite.visual.config.js'],
     languageOptions: {
       globals: globals.node
     }
   },
   {
     name: 'app/node-scripts',
-    files: ['scripts/**/*.mjs'],
+    files: ['scripts/**/*.mjs', 'tests/**/*.mjs'],
     languageOptions: {
       globals: globals.node,
       sourceType: 'module'

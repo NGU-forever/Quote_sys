@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { loadAndNormalizeSpec, getSkeletonSlots } from '../renderer/SpecLoader.js';
+import { getSkeletonSlots } from '../renderer/SpecLoader.js';
 import { PRESETS } from '../renderer/tokens/presets.js';
 import { ALL_BLOCK_TYPES } from '../renderer/BlockTypes.js';
 

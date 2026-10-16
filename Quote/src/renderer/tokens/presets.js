@@ -106,7 +106,7 @@ export function adjustColorContrast(hexColor, bgHex = '#FFFFFF') {
         .toString(16)
         .slice(1)}`;
     }
-  } catch (e) {
+  } catch {
     // 忽略异常，降级原色
   }
   return hexColor;
