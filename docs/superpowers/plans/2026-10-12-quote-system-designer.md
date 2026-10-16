@@ -454,6 +454,34 @@ git commit -m "feat(designer): implement designer API endpoints"
 - [x] 黄金屏：新增 2 张运行时外壳基准（多屏 + 导航）；`SpecRenderer` 单屏语义不变，
       原 18 张基准零改动
 - [x] 黄金屏门禁补漏：新增截图缺基准时报错，不再静默通过
-- [ ] 待办：Block 事件接入报价单 store（`SpecRenderer` 目前不转发 block 事件，
-      定制屏仍是「可看不可成交」—— 见交接说明）
+- [x] Block 事件接入报价单 store（见 Task 17）
+
+## Task 17: 宿主适配器 —— 让定制屏「能成交」
+
+**Files:**
+- New: `Quote/src/quote/specRuntime.js`（纯逻辑）、`Quote/src/quote/composables/useSpecRuntime.js`
+- New: `Quote/src/quote/__tests__/specRuntime.test.js`（20 项）
+- New: `Quote/src/renderer/blockEvents.js`、`Quote/src/renderer/__tests__/block_events.test.js`（4 项）
+- Modify: `Quote/src/renderer/{SpecRenderer,RuntimeShell}.vue`、`Quote/src/quote/views/LandingView.vue`
+- Modify: `Quote/src/renderer/skeletons/CatalogLeftFormRight.vue`
+- Modify: `Quote/visual/main.js`、`Quote/tests/visual/capture.mjs`
+
+审计发现：`SpecRenderer` 只往下传 props、不监听任何区块事件，16 个区块里
+`item_picker` / `item_table_editable` / `bundle_suggestion` / `export_actions`
+的 emit 全部落空 —— 定制屏「可看不可成交」。
+
+- [x] 事件转发：`blockEvents.js` 负责 kebab → camel 监听映射（`print-a4` → `onPrintA4`），
+      `SpecRenderer` 只给"确实支持该事件"的区块挂监听
+- [x] 下行适配：`buildRuntimeItems` 由 store 的设备/耗材/台数/箱数派生行项目
+      （金额口径与 `plan1DeviceCost` / `plan1ConsumablesCost` 一致）
+- [x] 上行动作：`resolveBlockIntent`（事件 → 声明式意图）+ `applyIntent`（意图 → store 调用），
+      两层都是纯函数，可用假 store 断言"到底调了哪个动作"
+- [x] 合计口径：`SpecRenderer`/`RuntimeShell` 支持宿主覆盖 `totalAmount`
+      （store 的有效总价，含最优套餐优惠），避免定制屏合计高于经典视图
+- [x] 打印/导出：定制屏复用 `ExportQuoteModal`，服务端提交与官方单号在同一条链上闭环
+- [x] 顺带修复：`CatalogLeftFormRight` 左栏未限高导致真实目录（25 个商品）把
+      底部合计与导出按钮顶出屏幕；改为左栏内部滚动（原 15 张基准零改动）
+- [x] 黄金屏新增「宿主适配器」基准：真实 pinia store + 真实适配器渲染，
+      金额/明细/合计均来自 store 真实计算（21/21）
+- [ ] 待办：`source_level` 语义修正、设计器测试统一到 PostgreSQL、黄金屏接入 CI
 
