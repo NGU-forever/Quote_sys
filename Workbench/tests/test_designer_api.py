@@ -79,6 +79,52 @@ def test_designer_api_preview(client_and_db):
     assert data["spec"]["style"]["preset_id"] == "medical-clean"
 
 
+def test_designer_api_profile_without_body(client_and_db):
+    """无 body 也要能出画像与通顺摘要（第 8 屏进页前只有画像）。"""
+    client, _ = client_and_db
+    resp = client.post("/api/designer/profile")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["profile"]["industry"]
+    assert "llm_enabled" in data
+    summary = data["summary_text"]
+    assert summary.startswith("我理解你是")
+    # 摘要里不得出现任何原始枚举码
+    for code in ("on_site", "floor_price", "print_a4", "device_with_consumable", "admin"):
+        assert code not in summary
+
+
+def test_designer_api_profile_with_answers(client_and_db):
+    """带向导答案时摘要要反映答案，而不是永远同一句模板。"""
+    client, _ = client_and_db
+    answers = {
+        "industry": "医疗设备",
+        "category_name": "超声设备",
+        "has_consumables": True,
+        "roles": ["admin", "sales"],
+        "scene": "office",
+        "pricing_mode": "tiered",
+        "require_approval": False,
+        "output_target": "pdf",
+        "brand_color_name": "品牌科技蓝",
+    }
+    resp = client.post("/api/designer/profile", json={"answers": answers})
+    assert resp.status_code == 200
+    summary = resp.json()["summary_text"]
+
+    assert "医疗设备" in summary
+    assert "超声设备" in summary
+    assert "老板、销售" in summary
+    assert "办公室电脑" in summary
+    assert "按批发数量自动阶梯价" in summary
+    assert "高品质 PDF" in summary
+    assert "品牌科技蓝" in summary
+    # 未要求审批时不得凭空断言需要审批
+    assert "破价需要审批" not in summary
+    for code in ("on_site", "office", "tiered", "pdf", "admin", "sales"):
+        assert code not in summary
+
+
 def test_designer_api_lifecycle(client_and_db):
     client, db = client_and_db
 

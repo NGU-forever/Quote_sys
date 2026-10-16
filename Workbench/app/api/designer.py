@@ -3,6 +3,7 @@
 实现端点：
 - POST  /api/designer/signals       计算画像指标、来源级别与排序结果
 - POST  /api/designer/preview       生成指定预设包的预览 Spec
+- POST  /api/designer/profile       资料 + 库内数据 → 业务画像（可选模型增强）
 - POST  /api/designer/compile       汇总向导答案生成正式 Spec 与校验报告
 - POST  /api/designer/finalize      定稿写入 ui_specs 冻结
 - GET   /api/designer/spec          读取当前生效 Spec
@@ -19,8 +20,10 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_user
-from app.designer.compiler import compile_wizard_to_spec
+from app.designer.compiler import compile_wizard_to_spec, generate_summary_text
+from app.designer.llm import resolve_provider
 from app.designer.presets import build_preview_spec_draft
+from app.designer.profiles import build_digest, resolve_profile
 from app.designer.ranking import determine_source_level, rank_preview_presets
 from app.designer.sampler import sample_preview_data
 from app.designer.signals import compute_signals
@@ -41,8 +44,14 @@ class PreviewRequest(BaseModel):
     preset_id: str = "order-entry"
 
 
+class ProfileRequest(BaseModel):
+    # 向导答案可选：进第 8 屏前只有画像，带答案时摘要更具体
+    answers: Dict[str, Any] = {}
+
+
 class CompileRequest(BaseModel):
     answers: Dict[str, Any]
+    enrich: bool = True  # 是否启用模型增强（离线/测试可关闭）
 
 
 class FinalizeRequest(BaseModel):
@@ -85,6 +94,33 @@ def get_preset_preview_spec(
     return {"spec": spec_draft}
 
 
+@router.post("/profile")
+def get_business_profile(
+    req: Optional[ProfileRequest] = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_admin),
+):
+    """资料 + 库内数据 → 业务画像（第 8 屏人话摘要的来源）。
+
+    未配置模型时返回规则画像，功能不降级。
+    body 可选：带 answers 时摘要按向导答案生成，不带时按画像兜底。
+    """
+    provider = resolve_provider(db)
+    profile, issues, digest = resolve_profile(db, provider=provider)
+    answers = (req.answers if req else None) or {}
+    return {
+        "profile": profile,
+        "issues": issues,
+        "digest": {
+            "assets": digest.get("assets") or [],
+            "terminology_hints": digest.get("terminology_hints") or {},
+            "signals": digest.get("signals") or {},
+        },
+        "llm_enabled": provider is not None,
+        "summary_text": generate_summary_text(answers, profile),
+    }
+
+
 @router.post("/compile")
 def compile_spec(
     req: CompileRequest,
@@ -93,8 +129,21 @@ def compile_spec(
 ):
     signals = compute_signals(db)
     source_level = determine_source_level(signals)
-    spec, issues = compile_wizard_to_spec(req.answers, signals, source_level=source_level)
-    return {"spec": spec, "issues": issues}
+    digest = build_digest(db)
+    provider = resolve_provider(db) if req.enrich else None
+    spec, issues = compile_wizard_to_spec(
+        req.answers,
+        signals,
+        source_level=source_level,
+        provider=provider,
+        digest=digest,
+    )
+    return {
+        "spec": spec,
+        "issues": issues,
+        "llm_enabled": provider is not None,
+        "summary_text": generate_summary_text(req.answers, spec.get("profile")),
+    }
 
 
 @router.post("/finalize")

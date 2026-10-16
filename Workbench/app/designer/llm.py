@@ -170,6 +170,22 @@ def _build_user_prompt(spec: dict, digest: dict, previous_errors: list[str]) -> 
     return json.dumps(payload, ensure_ascii=False, default=str)[:20000]
 
 
+def resolve_provider(db: Any) -> Any:
+    """解析设计器可用的模型客户端。
+
+    与 Agent 共用同一套解析逻辑（含 provider=auto 命中真实接口时的告警）；
+    mock / 未配置 / 解析失败一律返回 None —— 设计器此时全程走规则。
+    """
+    try:
+        from app.agent.agent_service import _provider
+        from app.services.agent_config_service import get_agent_ai
+
+        client, name = _provider(get_agent_ai(db))
+    except Exception:
+        return None
+    return client if name != "mock" else None
+
+
 def enrich_spec_with_llm(
     spec: dict,
     digest: dict,
