@@ -17,6 +17,7 @@ from app.designer.schema import (
     DEFAULT_DENSITY,
     DEFAULT_PRESET,
     DEFAULT_SKELETON,
+    MODULE_NAV,
     SKELETON_BLOCK_MATRIX,
     get_db_fields_registry,
     get_fallback_spec,
@@ -146,5 +147,56 @@ def validate_and_repair_spec(
                 issues.append("结构门：开单屏幕缺少价格合计块，已自动补齐 'price_summary'")
 
         screen["blocks"] = valid_blocks
+
+    # 4. 第四道门：导航门
+    # 此前 nav 完全没有校验，可以写入指向不存在屏幕的死链（运行时点不动）。
+    # 这里强制 nav 与 screens 一一对应：多余的导航项剔除，缺导航项的屏幕自动补齐。
+    screen_ids = [s.get("id") for s in screens if isinstance(s, dict)]
+    enabled_modules = repaired.get("modules") or []
+    raw_nav = repaired.get("nav")
+    valid_nav: List[Dict[str, str]] = []
+
+    if isinstance(raw_nav, list):
+        for item in raw_nav:
+            if not isinstance(item, dict):
+                continue
+            item_id = item.get("id")
+            if item_id not in screen_ids:
+                issues.append(f"导航门：导航项 '{item_id}' 没有对应屏幕，已被移除")
+                continue
+            if item_id not in enabled_modules:
+                issues.append(f"导航门：导航项 '{item_id}' 不在 modules 内，已被移除")
+                continue
+            meta = MODULE_NAV.get(item_id, {})
+            valid_nav.append(
+                {
+                    "id": item_id,
+                    "label": str(item.get("label") or meta.get("label") or item_id),
+                    "route": str(item.get("route") or meta.get("route") or f"/{item_id}"),
+                    "icon": str(item.get("icon") or meta.get("icon") or "file"),
+                }
+            )
+
+    nav_ids = {n["id"] for n in valid_nav}
+    for screen_id in screen_ids:
+        if screen_id in nav_ids:
+            continue
+        # 模块未启用的屏幕不补导航：补了也是点不到的死项
+        if enabled_modules and screen_id not in enabled_modules:
+            continue
+        meta = MODULE_NAV.get(screen_id)
+        if not meta:
+            continue
+        valid_nav.append(
+            {
+                "id": screen_id,
+                "label": meta["label"],
+                "route": meta["route"],
+                "icon": meta["icon"],
+            }
+        )
+        issues.append(f"导航门：屏幕 '{screen_id}' 缺少导航项，已自动补齐")
+
+    repaired["nav"] = valid_nav
 
     return repaired, issues

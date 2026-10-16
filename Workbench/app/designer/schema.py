@@ -52,6 +52,50 @@ ALLOWED_MODULES: Set[str] = {
     "customers",
 }
 
+# 模块的导航元数据。只有能落到 16 个标准 Block 上的模块才登记屏幕蓝图，
+# settings / employees 属管理工作台范畴，不产出员工端屏幕与导航项。
+MODULE_NAV: Dict[str, Dict[str, str]] = {
+    "quote_editor": {"label": "开单", "route": "/quote/new", "icon": "edit"},
+    "quotes": {"label": "报价单", "route": "/quotes", "icon": "file"},
+    "approval": {"label": "审批", "route": "/approval", "icon": "shield"},
+    "catalog": {"label": "商品目录", "route": "/catalog", "icon": "box"},
+    "customers": {"label": "客户", "route": "/customers", "icon": "users"},
+}
+
+# 非开单模块的屏幕蓝图：(骨架, [(block 类型, props)])
+# 骨架与区块必须落在 SKELETON_BLOCK_MATRIX 的兼容白名单内，否则会被结构门剔除。
+MODULE_SCREEN_BLUEPRINTS: Dict[str, Dict[str, Any]] = {
+    "quotes": {
+        "skeleton": "dashboard-grid",
+        "blocks": [
+            ("stats_cards", {"metrics": ["today_sales", "pending_approvals"]}),
+            ("recent_quotes", {"max_items": 10}),
+            ("activity_timeline", {"max_items": 8}),
+        ],
+    },
+    "approval": {
+        "skeleton": "dashboard-grid",
+        "blocks": [
+            ("approval_status", {"show_history": True}),
+            ("activity_timeline", {"max_items": 8}),
+        ],
+    },
+    "catalog": {
+        "skeleton": "list-detail-split",
+        "blocks": [
+            ("item_table_readonly", {"columns": ["sku_id", "name", "category", "unit_price"]}),
+            ("quote_meta", {}),
+        ],
+    },
+    "customers": {
+        "skeleton": "list-detail-split",
+        "blocks": [
+            ("customer_info", {"fields": ["customer_name", "customer_phone"]}),
+            ("activity_timeline", {"max_items": 8}),
+        ],
+    },
+}
+
 # 16 种 Block 白名单以及对应的骨架兼容性矩阵
 # 骨架代号映射：
 # 1: catalog-left-form-right
@@ -150,11 +194,10 @@ def get_fallback_spec() -> Dict[str, Any]:
             "tokens": {"color.primary": "#0B5FA5"},
         },
         "modules": ["catalog", "quote_editor", "quotes", "settings"],
+        # 兜底 Spec 只声明一个开单屏，nav 必须与之对应（导航门要求 nav ⇄ screens 一致）；
+        # 正式 Spec 的 screens/nav 由 navigation.rebuild_navigation 按 modules 展开。
         "nav": [
             {"id": "quote_editor", "label": "开单", "route": "/quote/new", "icon": "edit"},
-            {"id": "quotes", "label": "报价单", "route": "/quotes", "icon": "file"},
-            {"id": "catalog", "label": "商品管理", "route": "/catalog", "icon": "box"},
-            {"id": "settings", "label": "系统设置", "route": "/settings", "icon": "settings"},
         ],
         "screens": [
             {

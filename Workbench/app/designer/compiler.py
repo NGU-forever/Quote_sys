@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Tuple
 
 from app.designer.llm import enrich_spec_with_llm
+from app.designer.navigation import rebuild_navigation
 from app.designer.profiles import rule_based_profile
 from app.designer.schema import get_fallback_spec
 from app.designer.terminology import localize_field_labels, merge_labels
@@ -158,10 +159,13 @@ def compile_wizard_to_spec(
     if answers.get("brand_color"):
         spec["style"].setdefault("tokens", {})["color.primary"] = answers["brand_color"]
 
-    # 2. 模块与骨架
+    # 2. 模块、骨架、屏幕与导航
+    # 屏幕与导航由 modules 确定性派生：开了哪些模块，就有哪些可点到的屏幕，
+    # 不再出现"声明的 nav 与 screens 对不上"的情况（见 navigation.py 的不变量）。
     spec["modules"] = resolve_modules(answers, signals)
     skeleton = resolve_skeleton(answers, signals)
-    spec["screens"][0]["skeleton"] = skeleton
+    primary_screen = {**spec["screens"][0], "id": "quote_editor", "skeleton": skeleton}
+    rebuild_navigation(spec, primary_screen=primary_screen)
 
     # 3. 画像（规则）与字段术语（规则）
     base_profile = rule_based_profile(digest) if digest else {}

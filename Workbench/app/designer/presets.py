@@ -7,6 +7,8 @@
 """
 from typing import Any, Dict
 
+from app.designer.navigation import rebuild_navigation
+
 
 PRESET_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     "order-entry": {
@@ -116,9 +118,13 @@ def get_preset_meta() -> Dict[str, Dict[str, Any]]:
 def build_preview_spec_draft(
     preset_id: str, source_level: str = "sample"
 ) -> Dict[str, Any]:
-    """为第 0 屏可点原型构建完整的预览 UiSpec 草稿。"""
+    """为第 0 屏可点原型构建完整的预览 UiSpec 草稿。
+
+    屏幕与导航与正式编译走同一套确定性映射（navigation.rebuild_navigation），
+    保证"预览里点得到的"与"定稿后员工用得上的"是同一套导航。
+    """
     cfg = PRESET_DEFINITIONS.get(preset_id, PRESET_DEFINITIONS["order-entry"])
-    return {
+    spec: Dict[str, Any] = {
         "spec_version": 1,
         "meta": {
             "generator": f"preview-preset-{preset_id}",
@@ -152,3 +158,4 @@ def build_preview_spec_draft(
             }
         },
     }
+    return rebuild_navigation(spec, primary_screen=cfg["screens"][0])
