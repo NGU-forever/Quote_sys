@@ -4,77 +4,11 @@ import { packagesForSelection } from '../../shared/data/packages'
 import { clamp, today } from '../../shared/utils/format'
 import { useCatalogStore } from '../../shared/stores/catalog'
 import { useSettingsStore } from '../../shared/stores/settings'
+import { packageItems, packageUnitMetrics } from './packageMetrics.js'
 
 // 报价草稿本机持久化键：独立命名空间，仅存本设备；支持与服务器单号联动
 const LOCAL_QUOTES_KEY = 'quote_local_quotes_v1'
 const LEGACY_LOCAL_QUOTES_KEY = 'hhz_local_quotes_v1'
-
-function toNumber(value) {
-  if (value === '' || value === null || value === undefined) return null
-  const n = Number(value)
-  return Number.isFinite(n) ? n : null
-}
-
-function boxCount(quantity, unitsPerBox) {
-  const qty = toNumber(quantity)
-  const upb = toNumber(unitsPerBox)
-  if (qty === null || qty <= 0 || upb === null || upb <= 0) return null
-  return qty / upb
-}
-
-/**
- * 按套餐类型计算“单套”设备台数/耗材单位数/耗材箱数。
- * 固定整购套餐包含全部耗材行；赠机/推广套餐的耗材行视为任选其一，
- * 因此只取当前选中耗材那一行，避免把多款可选耗材重复相加。
- */
-function packageUnitMetrics(pkg, selectedDeviceId, selectedConsumableId) {
-  const fixedBundle = Boolean(pkg.fixedBundle)
-  const isDevice = (cat) => cat === 'device' || cat === 'hardware'
-  const deviceItems = items.filter((item) => isDevice(item.category))
-  const consumableItems = fixedBundle
-    ? items.filter((item) => !isDevice(item.category))
-    : items.filter(
-        (item) =>
-          !isDevice(item.category) &&
-          toNumber(item.productId ?? item.id) === toNumber(selectedConsumableId)
-      )
-
-  const deviceQty = toNumber(pkg.deviceQty) ?? null
-  const consumableQty = toNumber(pkg.consumableQty) ?? null
-  const consumableBoxes = toNumber(pkg.consumableBoxes) ?? null
-
-  let deviceQtyPerSet = deviceQty
-  if (deviceItems.length > 0) {
-    const deviceItem =
-      deviceItems.find(
-        (item) => toNumber(item.productId ?? item.id) === toNumber(selectedDeviceId)
-      ) || deviceItems[0]
-    const qty = toNumber(deviceItem?.quantity)
-    if (qty !== null && qty > 0) deviceQtyPerSet = qty
-  }
-
-  let consumableQtyPerSet = consumableQty
-  let consumableBoxesPerSet = consumableBoxes
-  if (consumableItems.length > 0) {
-    const quantities = consumableItems
-      .map((item) => toNumber(item.quantity))
-      .filter((qty) => qty !== null && qty > 0)
-    if (quantities.length > 0) consumableQtyPerSet = quantities.reduce((a, b) => a + b, 0)
-
-    const boxes = consumableItems
-      .map((item) => boxCount(item.quantity, item.bagsPerBox))
-      .filter((value) => value !== null)
-    if (boxes.length > 0) consumableBoxesPerSet = Math.round(boxes.reduce((a, b) => a + b, 0))
-  }
-
-  return {
-    deviceQtyPerSet: deviceQtyPerSet && deviceQtyPerSet > 0 ? deviceQtyPerSet : null,
-    consumableQtyPerSet:
-      consumableQtyPerSet && consumableQtyPerSet > 0 ? consumableQtyPerSet : null,
-    consumableBoxesPerSet:
-      consumableBoxesPerSet && consumableBoxesPerSet > 0 ? consumableBoxesPerSet : null
-  }
-}
 
 /** 从本机读取已保存报价草稿；缺失/损坏时返回 null（静默降级为无草稿） */
 function loadLocalQuotes() {
@@ -169,22 +103,8 @@ export const useQuoteStore = defineStore('quote', {
     packageModeRows() {
       const pkg = this.activePackage
       if (!pkg) return []
-      const items = Array.isArray(pkg.items) && pkg.items.length > 0 ? pkg.items : []
-      if (items.length > 0) return items
-      // 兼容旧同步缓存：固定整购套餐没有 items 时按一对 SKU 恢复单套组成。
-      if (pkg.deviceIds.length === 1 && pkg.consumableIds.length === 1) {
-        const consumable = this.catalog.productById(pkg.consumableIds[0])
-        return [
-          { productId: pkg.deviceIds[0], category: 'device', quantity: pkg.deviceQty || 1 },
-          {
-            productId: pkg.consumableIds[0],
-            category: 'consumable',
-            quantity: pkg.consumableQty || 0,
-            bagsPerBox: consumable?.bagsPerBox ?? null
-          }
-        ]
-      }
-      return []
+      // 明细优先取后端同步的 items；旧缓存无 items 时按一对 SKU 恢复单套组成。
+      return packageItems(pkg, this.catalog)
     },
     packageModeTotal(state) {
       return (Number(this.activePackage?.price) || 0) * state.packageSets
@@ -203,6 +123,7 @@ export const useQuoteStore = defineStore('quote', {
         const planNo = index + 2 // 方案二起
         const { deviceQtyPerSet, consumableQtyPerSet, consumableBoxesPerSet } = packageUnitMetrics(
           pkg,
+          packageItems(pkg, this.catalog),
           this.catalog.selectedDeviceId,
           this.catalog.selectedConsumableId
         )
