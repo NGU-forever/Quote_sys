@@ -1,6 +1,7 @@
 /**
  * SpecLoader: UiSpec 规范读取与防御性结构归一化
  */
+import { getNavItems } from './runtimeNav.js';
 
 export const SKELETON_SLOTS = {
   'catalog-left-form-right': ['left_rail', 'main_header', 'main_body', 'main_footer'],
@@ -97,7 +98,6 @@ export function loadAndNormalizeSpec(rawSpec) {
   const spec = JSON.parse(JSON.stringify(rawSpec));
   spec.spec_version = spec.spec_version || 1;
   spec.style = spec.style || { preset_id: 'medical-clean', density: 'comfortable' };
-  spec.modules = Array.isArray(spec.modules) ? spec.modules : ['quote_editor'];
 
   if (!Array.isArray(spec.screens) || spec.screens.length === 0) {
     spec.screens = [
@@ -108,6 +108,16 @@ export function loadAndNormalizeSpec(rawSpec) {
       },
     ];
   }
+
+  // modules 缺失时以「屏幕声明了什么」为准，避免用默认模块列表把屏幕误关掉。
+  spec.modules =
+    Array.isArray(spec.modules) && spec.modules.length > 0
+      ? spec.modules
+      : spec.screens.map((screen) => screen.id).filter(Boolean);
+
+  // nav 归一化：缺失时由 screens 派生，并剔除无目标屏幕/未启用模块的项，
+  // 与后端 navigation.py 的不变量保持一致（导航项永远点得到）。
+  spec.nav = getNavItems(spec);
 
   return spec;
 }

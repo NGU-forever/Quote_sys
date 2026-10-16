@@ -11,7 +11,7 @@ import {
 import Screen0PreviewCards from './Screen0PreviewCards.vue';
 import ScreenWizard from './ScreenWizard.vue';
 import Screen8SummaryConfirm from './Screen8SummaryConfirm.vue';
-import SpecRenderer from '../renderer/SpecRenderer.vue';
+import RuntimeShell from '../renderer/RuntimeShell.vue';
 
 const state = ref(createWizardState());
 const isFinalizing = ref(false);
@@ -159,9 +159,9 @@ async function handleResetEscape() {
 
 <template>
   <div class="designer-main-container w-full min-h-screen bg-gray-50 flex flex-col">
-    <!-- 如果已定稿：按当前生效的 UiSpec 进行运行时渲染 -->
+    <!-- 如果已定稿：按当前生效的 UiSpec 进行运行时渲染（与员工端同一套外壳） -->
     <template v-if="finalized && state.activeSpec">
-      <SpecRenderer
+      <RuntimeShell
         v-if="state.activeSpec"
         :spec="state.activeSpec"
         :data="{
@@ -191,7 +191,7 @@ async function handleResetEscape() {
             </button>
           </div>
         </template>
-      </SpecRenderer>
+      </RuntimeShell>
     </template>
 
     <!-- 尚未定稿：显示设计器向导流程 -->
